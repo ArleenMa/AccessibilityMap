@@ -88,6 +88,7 @@
     <script>
 const map = L.map('map').setView([35.90994468032028, -79.04754342458565], 16);
 let selectedLocation = null;
+let selectedLocationLabel = null;
 
 const locationMessage = document.getElementById('selected-location');
 const issueType = document.getElementById('issue-type');
@@ -132,6 +133,7 @@ async function findLocation(query) {
 
 function selectReportLocation(location, label) {
     selectedLocation = location;
+    selectedLocationLabel = label;
     if (reportLocationMarker) map.removeLayer(reportLocationMarker);
     reportLocationMarker = L.marker(selectedLocation).addTo(map);
     locationMessage.textContent = `Issue location selected: ${label}`;
@@ -238,11 +240,8 @@ reportForm.addEventListener('submit', (event) => {
     const cardTop = document.createElement('div');
     cardTop.className = 'report-card-top';
     const locationHeading = document.createElement('h3');
-    locationHeading.textContent = `${selectedLocation.lat.toFixed(5)}, ${selectedLocation.lng.toFixed(5)}`;
-    const status = document.createElement('span');
-    status.className = 'status';
-    status.textContent = 'Open';
-    cardTop.append(locationHeading, status);
+    locationHeading.textContent = selectedLocationLabel || `${selectedLocation.lat.toFixed(5)}, ${selectedLocation.lng.toFixed(5)}`;
+    cardTop.append(locationHeading);
     reportCard.append(cardTop);
     if (description) {
         const reportDescription = document.createElement('p');
@@ -259,6 +258,7 @@ reportForm.addEventListener('submit', (event) => {
     descriptionField.hidden = true;
     issueDescription.required = false;
     selectedLocation = null;
+    selectedLocationLabel = null;
     locationMessage.textContent = 'No location selected. Search above or click the map.';
     reportLocationSearchInput.value = '';
     reportLocationSearchMessage.textContent = '';
