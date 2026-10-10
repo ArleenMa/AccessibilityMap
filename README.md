@@ -5,6 +5,7 @@ An interactive map of the UNC campus to find locations, report accessibility iss
 ## Features
 
 - Search Chapel Hill locations and select a location for an issue report.
+- Switch between route finding and issue reporting using the sidebar tabs.
 - Report construction, blocked sidewalks, broken elevators, inaccessible ramps, and other issues with severity and expected duration. Mark each issue area's start and end on the map to define its circular coverage.
 - View and mark issue reports as resolved.
 - Find and display a walking route between two Chapel Hill locations, choosing to avoid all reported issues, moderate and severe issues, or severe issues.
