@@ -176,6 +176,7 @@ const issueColors = {
     'Inaccessible ramp': '#2471a3',
     Other: '#24795c'
 };
+const lineIssueTypes = new Set(['Blocked sidewalk', 'Inaccessible ramp']);
 
 const issueLegend = document.getElementById('issue-legend');
 Object.entries(issueColors).forEach(([category, color]) => {
@@ -204,7 +205,7 @@ const reportLocationSearchButton = document.getElementById('report-location-sear
 const reportLocationSearchMessage = document.getElementById('report-location-search-message');
 let reportStartMarker = null;
 let reportEndMarker = null;
-let reportPreviewCircle = null;
+let reportPreviewLayer = null;
 let selectedIssueLocationLabel = '';
 const selectedSuggestions = new WeakMap();
 
@@ -327,12 +328,12 @@ function formatMapLocation(location) {
 }
 
 function clearIssueAreaSelection() {
-    [reportStartMarker, reportEndMarker, reportPreviewCircle].forEach((layer) => {
+    [reportStartMarker, reportEndMarker, reportPreviewLayer].forEach((layer) => {
         if (layer) map.removeLayer(layer);
     });
     reportStartMarker = null;
     reportEndMarker = null;
-    reportPreviewCircle = null;
+    reportPreviewLayer = null;
     issueStartLocation = null;
     issueEndLocation = null;
     selectedLocation = null;
@@ -393,14 +394,20 @@ function setIssueAreaEnd(location) {
         weight: 2
     }).addTo(map).bindTooltip('Issue end');
     const highlightColor = issueColors[issueType.value] || issueColors.Other;
-    reportPreviewCircle = L.circle(selectedLocation, {
-        radius: distanceMeters / 2,
-        color: highlightColor,
-        fillColor: highlightColor,
-        opacity: 0.8,
-        fillOpacity: 0.2,
-        weight: 2
-    }).addTo(map);
+    reportPreviewLayer = lineIssueTypes.has(issueType.value)
+        ? L.polyline([issueStartLocation, issueEndLocation], {
+            color: highlightColor,
+            opacity: 0.8,
+            weight: 6
+        }).addTo(map)
+        : L.circle(selectedLocation, {
+            radius: distanceMeters / 2,
+            color: highlightColor,
+            fillColor: highlightColor,
+            opacity: 0.8,
+            fillOpacity: 0.2,
+            weight: 2
+        }).addTo(map);
     submitButton.disabled = false;
     locationMessage.textContent = `Issue area selected from ${formatMapLocation(issueStartLocation)} to ${formatMapLocation(issueEndLocation)} (${Math.round(distanceMeters)} m across). Adjust the points by clicking the map again, or submit the report.`;
 }
@@ -794,22 +801,29 @@ reportForm.addEventListener('submit', (event) => {
         Severe: 0.5
     };
     const highlightOpacity = severityOpacity[severity] || severityOpacity.Minor;
-    const newHighlight = L.circle(selectedLocation, {
-        radius: issueRadiusMeters,
-        color: highlightColor,
-        fillColor: highlightColor,
-        opacity: highlightOpacity,
-        fillOpacity: highlightOpacity,
-        weight: 2
-    }).addTo(map);
+    const isLineIssue = lineIssueTypes.has(category);
+    const newHighlight = isLineIssue
+        ? L.polyline([issueStartLocation, issueEndLocation], {
+            color: highlightColor,
+            opacity: highlightOpacity + 0.5,
+            weight: 6
+        }).addTo(map)
+        : L.circle(selectedLocation, {
+            radius: issueRadiusMeters,
+            color: highlightColor,
+            fillColor: highlightColor,
+            opacity: highlightOpacity,
+            fillOpacity: highlightOpacity,
+            weight: 2
+        }).addTo(map);
     const reportedIssue = { location: reportLatLng, radius: issueRadiusMeters, severity };
     reportedIssues.push(reportedIssue);
-    [reportStartMarker, reportEndMarker, reportPreviewCircle].forEach((layer) => {
+    [reportStartMarker, reportEndMarker, reportPreviewLayer].forEach((layer) => {
         if (layer) map.removeLayer(layer);
     });
     reportStartMarker = null;
     reportEndMarker = null;
-    reportPreviewCircle = null;
+    reportPreviewLayer = null;
     const deleteButton = document.createElement('button');
     deleteButton.textContent = 'Mark as Resolved';
     deleteButton.addEventListener('click', () => {
@@ -851,7 +865,7 @@ reportForm.addEventListener('submit', (event) => {
     const cardTop = document.createElement('div');
     cardTop.className = 'report-card-top';
     const locationHeading = document.createElement('h3');
-    locationHeading.textContent = `${selectedLocationLabel || formatMapLocation(selectedLocation)} (${Math.round(issueRadiusMeters * 2)} m across)`;
+    locationHeading.textContent = `${selectedLocationLabel || formatMapLocation(selectedLocation)} (${Math.round(issueRadiusMeters * 2)} m ${isLineIssue ? 'long' : 'across'})`;
     cardTop.append(locationHeading);
     reportCard.append(cardTop);
     if (description) {
