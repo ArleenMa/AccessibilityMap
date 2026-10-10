@@ -196,6 +196,35 @@ h2 {
   color: #19352d;
 }
 
+.choice-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.field-label {
+  margin: 0;
+  font-weight: bold;
+}
+
+.choice-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dfe9e2;
+  border-radius: 10px;
+  background: #f8faf8;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.choice-option input {
+  margin-top: 3px;
+  width: auto;
+}
+
 .form input:focus,
 .form select:focus,
 .form textarea:focus {
@@ -292,6 +321,30 @@ h2 {
   border-radius: 14px;
 }
 
+.issue-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 14px;
+}
+
+.issue-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #52665d;
+  font-size: 13px;
+}
+
+.issue-legend-swatch {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 1px solid #19352d;
+  border-radius: 50%;
+  opacity: 0.8;
+}
+
 #recent-reports:empty::after {
   content: "No reports yet.";
   display: block;
@@ -349,6 +402,8 @@ h2 {
 }
 
 .report-category,
+.report-severity,
+.report-duration,
 .status {
   font-size: 12px;
   padding: 6px 9px;
@@ -360,9 +415,26 @@ h2 {
   color: #784c0a;
 }
 
+.report-severity {
+  background: #fbe6e6;
+  color: #8d3a3a;
+}
+
+.report-duration {
+  background: #e5eefb;
+  color: #234b7e;
+}
+
 .status {
   background: #e4f4e9;
   color: #21623c;
+}
+
+.report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 footer {

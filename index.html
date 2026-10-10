@@ -29,15 +29,8 @@
                     <h2>Map</h2>
                     <span class="demo-label">LIVE MAP</span>
                 </div>
-                <form id="location-search-form" class="location-search" role="search">
-                    <label for="location-search">Search within the Chapel Hill area</label>
-                    <div class="location-search-controls">
-                        <input id="location-search" name="location" type="search" placeholder="e.g. 123 Main St or UNC Chapel Hill" autocomplete="off" required>
-                        <button id="location-search-button" type="submit">Search</button>
-                    </div>
-                    <p id="location-search-message" class="map-note" aria-live="polite"></p>
-                </form>
                 <div id="map"></div>
+                <div id="issue-legend" class="issue-legend" aria-label="Issue highlight color legend"></div>
             </section>
 
             <aside class="sidebar">
@@ -45,7 +38,7 @@
                     <h2>Report an issue</h2>
                     <p>Search for the issue location or click the map, then add the issue details.</p>
                     <form id="report-location-search-form" class="location-search" role="search">
-                        <label for="report-location-search">Search for an issue location in Chapel Hill</label>
+                        <label for="report-location-search">Search Location</label>
                         <div class="location-search-controls">
                             <input id="report-location-search" name="reportLocation" type="search" placeholder="e.g. Davis Library, Chapel Hill" autocomplete="off" required>
                             <button id="report-location-search-button" type="submit">Search</button>
@@ -66,6 +59,38 @@
                         <div id="other-description-field" hidden>
                             <label for="issue-description">Short description</label>
                             <textarea id="issue-description" name="description" rows="3" maxlength="160" placeholder="Describe the issue (160 characters max)"></textarea>
+                        </div>
+
+                        <div class="choice-group" role="radiogroup" aria-label="Severity">
+                            <p class="field-label">Severity</p>
+                            <label class="choice-option">
+                                <input type="radio" name="severity" value="Minor" required>
+                                <span><strong>Minor</strong> - inconvenience, alternate path nearby</span>
+                            </label>
+                            <label class="choice-option">
+                                <input type="radio" name="severity" value="Moderate">
+                                <span><strong>Moderate</strong> - major detour required</span>
+                            </label>
+                            <label class="choice-option">
+                                <input type="radio" name="severity" value="Severe">
+                                <span><strong>Severe</strong> - route may be impassable</span>
+                            </label>
+                        </div>
+
+                        <div class="choice-group" role="radiogroup" aria-label="Expected duration">
+                            <p class="field-label">Expected duration</p>
+                            <label class="choice-option">
+                                <input type="radio" name="expectedDuration" value="Temporary/short-term" required>
+                                <span>Temporary/short-term</span>
+                            </label>
+                            <label class="choice-option">
+                                <input type="radio" name="expectedDuration" value="Long-term">
+                                <span>Long-term</span>
+                            </label>
+                            <label class="choice-option">
+                                <input type="radio" name="expectedDuration" value="Unknown">
+                                <span>Unknown</span>
+                            </label>
                         </div>
                         <button id="submit-report" type="submit" disabled>Submit report</button>
                     </form>
@@ -89,6 +114,27 @@
 const map = L.map('map').setView([35.90994468032028, -79.04754342458565], 16);
 let selectedLocation = null;
 let selectedLocationLabel = null;
+const issueColors = {
+    Construction: '#d66b00',
+    'Blocked sidewalk': '#b83232',
+    'Broken elevator': '#7651a8',
+    'Inaccessible ramp': '#2471a3',
+    Other: '#24795c'
+};
+
+const issueLegend = document.getElementById('issue-legend');
+Object.entries(issueColors).forEach(([category, color]) => {
+    const item = document.createElement('div');
+    item.className = 'issue-legend-item';
+    const swatch = document.createElement('span');
+    swatch.className = 'issue-legend-swatch';
+    swatch.style.backgroundColor = color;
+    swatch.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.textContent = category;
+    item.append(swatch, label);
+    issueLegend.append(item);
+});
 
 const locationMessage = document.getElementById('selected-location');
 const issueType = document.getElementById('issue-type');
@@ -97,15 +143,10 @@ const issueDescription = document.getElementById('issue-description');
 const reportForm = document.getElementById('report-form');
 const submitButton = document.getElementById('submit-report');
 const recentReports = document.getElementById('recent-reports');
-const locationSearchForm = document.getElementById('location-search-form');
-const locationSearchInput = document.getElementById('location-search');
-const locationSearchButton = document.getElementById('location-search-button');
-const locationSearchMessage = document.getElementById('location-search-message');
 const reportLocationSearchForm = document.getElementById('report-location-search-form');
 const reportLocationSearchInput = document.getElementById('report-location-search');
 const reportLocationSearchButton = document.getElementById('report-location-search-button');
 const reportLocationSearchMessage = document.getElementById('report-location-search-message');
-let mapSearchMarker = null;
 let reportLocationMarker = null;
 
 async function findLocation(query) {
@@ -146,32 +187,6 @@ map.on('click', (event) => {
     reportLocationSearchMessage.textContent = '';
 });
 
-locationSearchForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const query = locationSearchInput.value.trim();
-    if (!query) return;
-
-    locationSearchButton.disabled = true;
-    locationSearchMessage.textContent = 'Searching for location...';
-    try {
-        const result = await findLocation(query);
-        if (!result) {
-            locationSearchMessage.textContent = 'No matching location found in the Chapel Hill area. Try a more specific address or place name.';
-            return;
-        }
-
-        map.setView(result.location, Math.max(map.getZoom(), 17));
-        if (mapSearchMarker) map.removeLayer(mapSearchMarker);
-        mapSearchMarker = L.marker(result.location).addTo(map);
-        locationSearchMessage.textContent = result.displayName || 'Map centered on this location.';
-    } catch (error) {
-        console.error('Unable to search for location:', error);
-        locationSearchMessage.textContent = 'Unable to search right now. Please try again.';
-    } finally {
-        locationSearchButton.disabled = false;
-    }
-});
-
 reportLocationSearchForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const query = reportLocationSearchInput.value.trim();
@@ -209,6 +224,9 @@ reportForm.addEventListener('submit', (event) => {
 
     const category = issueType.value;
     const description = issueDescription.value.trim();
+    const severity = document.querySelector('input[name="severity"]:checked')?.value || 'Not specified';
+    const expectedDuration = document.querySelector('input[name="expectedDuration"]:checked')?.value || 'Not specified';
+
     const popupContent = document.createElement('div');
     popupContent.style.display="flex";
     popupContent.style.flexDirection="column";
@@ -216,12 +234,35 @@ reportForm.addEventListener('submit', (event) => {
     const popupTitle = document.createElement('strong');
     popupTitle.textContent = category;
     popupContent.append(popupTitle);
+
+    const popupSeverity = document.createElement('p');
+    popupSeverity.textContent = `Severity: ${severity}`;
+    popupContent.append(popupSeverity);
+
+    const popupDuration = document.createElement('p');
+    popupDuration.textContent = `Expected duration: ${expectedDuration}`;
+    popupContent.append(popupDuration);
+
     if (description) {
         const popupDescription = document.createElement('p');
         popupDescription.textContent = description;
         popupContent.append(popupDescription);
     }
-    const newMarker = L.marker(selectedLocation).addTo(map);
+    const highlightColor = issueColors[category] || issueColors.Other;
+    const severityOpacity = {
+        Minor: 0.15,
+        Moderate: 0.3,
+        Severe: 0.5
+    };
+    const highlightOpacity = severityOpacity[severity] || severityOpacity.Minor;
+    const newHighlight = L.circle(selectedLocation, {
+        radius: 25,
+        color: highlightColor,
+        fillColor: highlightColor,
+        opacity: highlightOpacity,
+        fillOpacity: highlightOpacity,
+        weight: 2
+    }).addTo(map);
     if (reportLocationMarker) {
         map.removeLayer(reportLocationMarker);
         reportLocationMarker = null;
@@ -229,11 +270,31 @@ reportForm.addEventListener('submit', (event) => {
     const deleteButton = document.createElement('button');
     deleteButton.textContent = 'Delete';
     deleteButton.addEventListener('click', () => {
-        map.removeLayer(newMarker);
+        map.removeLayer(newHighlight);
         reportCard.remove();
     });
     popupContent.append(deleteButton);
-    newMarker.bindPopup(popupContent).openPopup();
+    newHighlight.bindPopup(popupContent);
+
+    let popupCloseTimeout;
+    const schedulePopupClose = () => {
+        window.clearTimeout(popupCloseTimeout);
+        popupCloseTimeout = window.setTimeout(() => {
+            const popupElement = newHighlight.getPopup().getElement();
+            if (!popupElement?.matches(':hover')) newHighlight.closePopup();
+        }, 200);
+    };
+
+    newHighlight.on('mouseover', () => {
+        window.clearTimeout(popupCloseTimeout);
+        newHighlight.openPopup();
+    });
+    newHighlight.on('mouseout', schedulePopupClose);
+    newHighlight.on('popupopen', (event) => {
+        const popupElement = event.popup.getElement();
+        popupElement.addEventListener('mouseenter', () => window.clearTimeout(popupCloseTimeout));
+        popupElement.addEventListener('mouseleave', schedulePopupClose);
+    });
 
     const reportCard = document.createElement('article');
     reportCard.className = 'report-card';
@@ -248,10 +309,19 @@ reportForm.addEventListener('submit', (event) => {
         reportDescription.textContent = description;
         reportCard.append(reportDescription);
     }
+    const meta = document.createElement('div');
+    meta.className = 'report-meta';
     const categoryLabel = document.createElement('span');
     categoryLabel.className = 'report-category';
     categoryLabel.textContent = category;
-    reportCard.append(categoryLabel);
+    const severityLabel = document.createElement('span');
+    severityLabel.className = 'report-severity';
+    severityLabel.textContent = `Severity: ${severity}`;
+    const durationLabel = document.createElement('span');
+    durationLabel.className = 'report-duration';
+    durationLabel.textContent = `Duration: ${expectedDuration}`;
+    meta.append(categoryLabel, severityLabel, durationLabel);
+    reportCard.append(meta);
     recentReports.prepend(reportCard);
 
     reportForm.reset();
