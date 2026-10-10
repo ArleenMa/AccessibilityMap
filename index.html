@@ -68,6 +68,13 @@
       <div id="route-end-suggestions" class="location-suggestions" role="listbox" aria-label="Destination suggestions" hidden></div>
     </div>
 
+    <label for="route-avoidance">Avoid reported issues</label>
+    <select id="route-avoidance">
+      <option value="all" selected>Avoid issues of all severities</option>
+      <option value="moderate-severe">Avoid moderate and severe issues</option>
+      <option value="severe">Avoid severe issues</option>
+    </select>
+
     <button id="route-button" type="submit">
       Find walking route
     </button>
@@ -79,7 +86,7 @@
 
                 <section class="report-section">
                     <h2>Report an issue</h2>
-                    <p>Search for the issue location or click the map, then add the issue details.</p>
+                    <p>Search to center the map, then click the map to mark the issue area's start and end points.</p>
                     <form id="report-location-search-form" class="location-search" role="search">
                         <label for="report-location-search">Search Location</label>
                         <div class="location-search-controls">
@@ -91,7 +98,7 @@
                         </div>
                         <p id="report-location-search-message" class="map-note" aria-live="polite"></p>
                     </form>
-                    <p id="selected-location" class="map-note" aria-live="polite">No location selected. Search above or click the map.</p>
+                    <p id="selected-location" class="map-note" aria-live="polite">No issue area selected. Search for a location or click the map to choose a start point.</p>
                     <form id="report-form" class="form">
                         <label for="issue-type">Type of issue</label>
                         <select id="issue-type" name="issueType" required>
@@ -160,6 +167,8 @@
 const map = L.map('map').setView([35.90994468032028, -79.04754342458565], 16);
 let selectedLocation = null;
 let selectedLocationLabel = null;
+let issueStartLocation = null;
+let issueEndLocation = null;
 const issueColors = {
     Construction: '#d66b00',
     'Blocked sidewalk': '#b83232',
@@ -193,13 +202,16 @@ const reportLocationSearchForm = document.getElementById('report-location-search
 const reportLocationSearchInput = document.getElementById('report-location-search');
 const reportLocationSearchButton = document.getElementById('report-location-search-button');
 const reportLocationSearchMessage = document.getElementById('report-location-search-message');
-let reportLocationMarker = null;
+let reportStartMarker = null;
+let reportEndMarker = null;
+let reportPreviewCircle = null;
+let selectedIssueLocationLabel = '';
 const selectedSuggestions = new WeakMap();
 
 async function findLocationSuggestions(query, signal) {
     const parameters = new URLSearchParams({
         q: query,
-        limit: '5',
+        limit: '20',
         bbox: '-79.18,35.82,-78.93,36.02',
         lat: '35.9099',
         lon: '-79.0475'
@@ -211,6 +223,12 @@ async function findLocationSuggestions(query, signal) {
 
     const data = await response.json();
     return (Array.isArray(data.features) ? data.features : [])
+        .filter((feature) => {
+            const properties = feature.properties || {};
+            const locality = properties.city || properties.locality;
+            return typeof locality === 'string' &&
+                locality.trim().toLocaleLowerCase() === 'chapel hill';
+        })
         .map((feature) => {
             const coordinates = feature.geometry?.coordinates;
             const longitude = Number(coordinates?.[0]);
@@ -235,12 +253,16 @@ async function findLocationSuggestions(query, signal) {
                 displayName
             };
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        .slice(0, 5);
 }
 
 async function findLocation(query) {
+    const chapelHillQuery = /chapel hill/i.test(query)
+        ? query
+        : `${query}, Chapel Hill, North Carolina`;
     const parameters = new URLSearchParams({
-        q: query,
+        q: chapelHillQuery,
         format: 'jsonv2',
         limit: '1',
         viewbox: '-79.18,36.02,-78.93,35.82',
@@ -266,10 +288,122 @@ const routeStartInput = document.getElementById("route-start");
 const routeEndInput = document.getElementById("route-end");
 const routeButton = document.getElementById("route-button");
 const routeStatus = document.getElementById("route-status");
+const routeAvoidance = document.getElementById("route-avoidance");
 
 let routeLayer = null;
 let routeStartMarker = null;
 let routeEndMarker = null;
+const reportedIssues = [];
+
+function issueExclusionPolygon(location, radiusMeters = 25) {
+  const earthRadiusMeters = 6371008.8;
+  const latitude = location.lat * Math.PI / 180;
+  const longitude = location.lng * Math.PI / 180;
+  const angularRadius = radiusMeters / earthRadiusMeters;
+  const ring = [];
+
+  for (let index = 0; index < 24; index += 1) {
+    const bearing = 2 * Math.PI * index / 24;
+    const excludedLatitude = Math.asin(
+      Math.sin(latitude) * Math.cos(angularRadius) +
+      Math.cos(latitude) * Math.sin(angularRadius) * Math.cos(bearing)
+    );
+    const excludedLongitude = longitude + Math.atan2(
+      Math.sin(bearing) * Math.sin(angularRadius) * Math.cos(latitude),
+      Math.cos(angularRadius) - Math.sin(latitude) * Math.sin(excludedLatitude)
+    );
+    ring.push([
+      excludedLongitude * 180 / Math.PI,
+      excludedLatitude * 180 / Math.PI
+    ]);
+  }
+
+  ring.push(ring[0]);
+  return ring;
+}
+
+function formatMapLocation(location) {
+    return `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`;
+}
+
+function clearIssueAreaSelection() {
+    [reportStartMarker, reportEndMarker, reportPreviewCircle].forEach((layer) => {
+        if (layer) map.removeLayer(layer);
+    });
+    reportStartMarker = null;
+    reportEndMarker = null;
+    reportPreviewCircle = null;
+    issueStartLocation = null;
+    issueEndLocation = null;
+    selectedLocation = null;
+    selectedLocationLabel = null;
+    submitButton.disabled = true;
+}
+
+function centerMapForIssueArea(location, label) {
+    clearIssueAreaSelection();
+    selectedIssueLocationLabel = label;
+    map.setView(location, Math.max(map.getZoom(), 17));
+    locationMessage.textContent = `Map centered on ${label}. Click the map to mark the issue area's start point.`;
+}
+
+function setIssueAreaStart(location) {
+    clearIssueAreaSelection();
+    issueStartLocation = location;
+    reportStartMarker = L.circleMarker(location, {
+        radius: 7,
+        color: '#19352d',
+        fillColor: '#4B9CD3',
+        fillOpacity: 1,
+        weight: 2
+    }).addTo(map).bindTooltip('Issue start');
+    locationMessage.textContent = `Start point selected at ${formatMapLocation(location)}. Click the map to mark the end point.`;
+}
+
+function setIssueAreaEnd(location) {
+    const distanceMeters = issueStartLocation.distanceTo(location);
+    if (distanceMeters < 1) {
+        locationMessage.textContent = 'Choose an end point at least 1 meter from the start point.';
+        return;
+    }
+
+    issueEndLocation = location;
+    const startLatitude = issueStartLocation.lat * Math.PI / 180;
+    const endLatitude = issueEndLocation.lat * Math.PI / 180;
+    const longitudeDifference = (issueEndLocation.lng - issueStartLocation.lng) * Math.PI / 180;
+    const midpointLatitude = Math.atan2(
+        Math.sin(startLatitude) + Math.sin(endLatitude),
+        Math.sqrt(
+            (Math.cos(startLatitude) + Math.cos(endLatitude) * Math.cos(longitudeDifference)) ** 2 +
+            (Math.cos(endLatitude) * Math.sin(longitudeDifference)) ** 2
+        )
+    );
+    const midpointLongitude = issueStartLocation.lng * Math.PI / 180 + Math.atan2(
+        Math.cos(endLatitude) * Math.sin(longitudeDifference),
+        Math.cos(startLatitude) + Math.cos(endLatitude) * Math.cos(longitudeDifference)
+    );
+    selectedLocation = L.latLng(midpointLatitude * 180 / Math.PI, midpointLongitude * 180 / Math.PI);
+    selectedLocationLabel = selectedIssueLocationLabel || `Issue area (${formatMapLocation(selectedLocation)})`;
+
+    reportEndMarker = L.circleMarker(issueEndLocation, {
+        radius: 7,
+        color: '#19352d',
+        fillColor: '#d66b00',
+        fillOpacity: 1,
+        weight: 2
+    }).addTo(map).bindTooltip('Issue end');
+    const highlightColor = issueColors[issueType.value] || issueColors.Other;
+    reportPreviewCircle = L.circle(selectedLocation, {
+        radius: distanceMeters / 2,
+        color: highlightColor,
+        fillColor: highlightColor,
+        opacity: 0.8,
+        fillOpacity: 0.2,
+        weight: 2
+    }).addTo(map);
+    submitButton.disabled = false;
+    locationMessage.textContent = `Issue area selected from ${formatMapLocation(issueStartLocation)} to ${formatMapLocation(issueEndLocation)} (${Math.round(distanceMeters)} m across). Adjust the points by clicking the map again, or submit the report.`;
+}
 
 routeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -311,7 +445,14 @@ routeForm.addEventListener("submit", async (event) => {
       ]
     ];
 
-    
+    const avoidedSeverities = {
+      all: new Set(["Minor", "Moderate", "Severe"]),
+      "moderate-severe": new Set(["Moderate", "Severe"]),
+      severe: new Set(["Severe"])
+    }[routeAvoidance.value];
+    const excludedIssues = reportedIssues.filter(({ severity }) =>
+      avoidedSeverities.has(severity)
+    );
 
 const routingRequest = {
   locations: [
@@ -327,7 +468,12 @@ const routingRequest = {
   costing: "pedestrian",
   units: "kilometers",
   format: "osrm",
-  shape_format: "geojson"
+  shape_format: "geojson",
+  ...(excludedIssues.length > 0 && {
+    exclude_polygons: excludedIssues.map(({ location, radius }) =>
+    issueExclusionPolygon(location, radius)
+    )
+  })
 };
 
 const response = await fetch(
@@ -421,10 +567,12 @@ const feature = {
 
       routeStatus.textContent =
         `Route found: ${distanceText}, approximately ${minutes} minutes. ` +
+        `Avoided ${excludedIssues.length} reported issue${excludedIssues.length === 1 ? "" : "s"}. ` +
         "Check the route on the map before traveling.";
     } else {
       routeStatus.textContent =
-        "Route displayed. Check the map before traveling.";
+        `Route displayed. Avoided ${excludedIssues.length} reported issue${excludedIssues.length === 1 ? "" : "s"}. ` +
+        "Check the map before traveling.";
     }
   } catch (error) {
     console.error("Routing error:", error);
@@ -436,13 +584,12 @@ const feature = {
 });
 
 
-function selectReportLocation(location, label) {
-    selectedLocation = location;
-    selectedLocationLabel = label;
-    if (reportLocationMarker) map.removeLayer(reportLocationMarker);
-    reportLocationMarker = L.marker(selectedLocation).addTo(map);
-    locationMessage.textContent = `Issue location selected: ${label}`;
-    submitButton.disabled = false;
+function selectReportLocation(location) {
+    if (!issueStartLocation || issueEndLocation) {
+        setIssueAreaStart(location);
+        return;
+    }
+    setIssueAreaEnd(location);
 }
 
 function attachLocationAutocomplete(input, onSelect = () => {}) {
@@ -503,7 +650,7 @@ function attachLocationAutocomplete(input, onSelect = () => {}) {
                     emptyMessage.className = 'location-suggestion-message';
                     emptyMessage.setAttribute('role', 'option');
                     emptyMessage.setAttribute('aria-disabled', 'true');
-                    emptyMessage.textContent = 'No matching locations found nearby.';
+                    emptyMessage.textContent = 'No matching Chapel Hill locations found.';
                     suggestions.append(emptyMessage);
                 } else {
                     results.forEach((result, index) => {
@@ -564,13 +711,12 @@ function attachLocationAutocomplete(input, onSelect = () => {}) {
 attachLocationAutocomplete(routeStartInput);
 attachLocationAutocomplete(routeEndInput);
 attachLocationAutocomplete(reportLocationSearchInput, (result) => {
-    map.setView(result.location, Math.max(map.getZoom(), 17));
-    selectReportLocation(result.location, result.displayName);
-    reportLocationSearchMessage.textContent = 'Location selected for your report.';
+    centerMapForIssueArea(result.location, result.displayName);
+    reportLocationSearchMessage.textContent = 'Map centered. Click the map to choose the issue area start point.';
 });
 
 map.on('click', (event) => {
-    selectReportLocation(event.latlng, `${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}`);
+    selectReportLocation(event.latlng);
     reportLocationSearchInput.value = '';
     reportLocationSearchMessage.textContent = '';
 });
@@ -592,9 +738,9 @@ reportLocationSearchForm.addEventListener('submit', async (event) => {
             return;
         }
 
-        map.setView(result.location, Math.max(map.getZoom(), 17));
-        selectReportLocation(result.location, result.displayName || `${result.location.lat.toFixed(5)}, ${result.location.lng.toFixed(5)}`);
-        reportLocationSearchMessage.textContent = 'Location selected for your report.';
+        const label = result.displayName || formatMapLocation(result.location);
+        centerMapForIssueArea(result.location, label);
+        reportLocationSearchMessage.textContent = 'Map centered. Click the map to choose the issue area start point.';
     } catch (error) {
         console.error('Unable to search for report location:', error);
         reportLocationSearchMessage.textContent = 'Unable to search right now. Please try again.';
@@ -611,9 +757,10 @@ issueType.addEventListener('change', () => {
 
 reportForm.addEventListener('submit', (event) => {
     event.preventDefault();
-    if (!selectedLocation || !reportForm.reportValidity()) return;
+    if (!issueStartLocation || !issueEndLocation || !selectedLocation || !reportForm.reportValidity()) return;
 
     const reportLatLng = selectedLocation;
+    const issueRadiusMeters = issueStartLocation.distanceTo(issueEndLocation) / 2;
     const category = issueType.value;
     const description = issueDescription.value.trim();
     const severity = document.querySelector('input[name="severity"]:checked')?.value || 'Not specified';
@@ -648,20 +795,26 @@ reportForm.addEventListener('submit', (event) => {
     };
     const highlightOpacity = severityOpacity[severity] || severityOpacity.Minor;
     const newHighlight = L.circle(selectedLocation, {
-        radius: 25,
+        radius: issueRadiusMeters,
         color: highlightColor,
         fillColor: highlightColor,
         opacity: highlightOpacity,
         fillOpacity: highlightOpacity,
         weight: 2
     }).addTo(map);
-    if (reportLocationMarker) {
-        map.removeLayer(reportLocationMarker);
-        reportLocationMarker = null;
-    }
+    const reportedIssue = { location: reportLatLng, radius: issueRadiusMeters, severity };
+    reportedIssues.push(reportedIssue);
+    [reportStartMarker, reportEndMarker, reportPreviewCircle].forEach((layer) => {
+        if (layer) map.removeLayer(layer);
+    });
+    reportStartMarker = null;
+    reportEndMarker = null;
+    reportPreviewCircle = null;
     const deleteButton = document.createElement('button');
-    deleteButton.textContent = 'Delete';
+    deleteButton.textContent = 'Mark as Resolved';
     deleteButton.addEventListener('click', () => {
+        const issueIndex = reportedIssues.indexOf(reportedIssue);
+        if (issueIndex !== -1) reportedIssues.splice(issueIndex, 1);
         map.removeLayer(newHighlight);
         reportCard.remove();
     });
@@ -698,7 +851,7 @@ reportForm.addEventListener('submit', (event) => {
     const cardTop = document.createElement('div');
     cardTop.className = 'report-card-top';
     const locationHeading = document.createElement('h3');
-    locationHeading.textContent = selectedLocationLabel || `${selectedLocation.lat.toFixed(5)}, ${selectedLocation.lng.toFixed(5)}`;
+    locationHeading.textContent = `${selectedLocationLabel || formatMapLocation(selectedLocation)} (${Math.round(issueRadiusMeters * 2)} m across)`;
     cardTop.append(locationHeading);
     reportCard.append(cardTop);
     if (description) {
@@ -724,9 +877,12 @@ reportForm.addEventListener('submit', (event) => {
     reportForm.reset();
     descriptionField.hidden = true;
     issueDescription.required = false;
+    issueStartLocation = null;
+    issueEndLocation = null;
     selectedLocation = null;
     selectedLocationLabel = null;
-    locationMessage.textContent = 'No location selected. Search above or click the map.';
+    selectedIssueLocationLabel = '';
+    locationMessage.textContent = 'No issue area selected. Search for a location or click the map to choose a start point.';
     reportLocationSearchInput.value = '';
     reportLocationSearchMessage.textContent = '';
     submitButton.disabled = true;
