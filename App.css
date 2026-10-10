@@ -1,0 +1,279 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f7f5;
+  color: #19352d;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app {
+  max-width: 850px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background: #164e3d;
+  color: white;
+  padding: 28px;
+  border-radius: 20px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+.header h1 {
+  margin: 8px 0;
+  font-size: 36px;
+}
+
+.access-icon {
+  font-size: 42px;
+}
+
+.welcome {
+  padding: 20px 0;
+}
+
+h2 {
+  margin-bottom: 8px;
+}
+
+.welcome p,
+.report-section > p {
+  color: #52665d;
+  line-height: 1.6;
+}
+
+.map-section,
+.report-section,
+.reports-section {
+  background: white;
+  padding: 22px;
+  margin: 20px 0;
+  border-radius: 18px;
+  border: 1px solid #e0e9e3;
+}
+
+.section-heading,
+.report-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.demo-label {
+  font-size: 11px;
+  font-weight: bold;
+  color: #64776d;
+}
+
+.map-placeholder {
+  height: 300px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #e4efe2;
+  background-image: radial-gradient(#b8cfb5 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.map-road {
+  position: absolute;
+  height: 22px;
+  width: 130%;
+  background: white;
+  border: 1px solid #d5dfd3;
+}
+
+.road-one {
+  top: 110px;
+  left: -20px;
+  transform: rotate(-20deg);
+}
+
+.road-two {
+  top: 170px;
+  left: -30px;
+  transform: rotate(25deg);
+}
+
+.building {
+  position: absolute;
+  background: #c2d9c3;
+  border: 2px solid #8eaf91;
+  padding: 12px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.building-one {
+  top: 25px;
+  left: 25px;
+}
+
+.building-two {
+  right: 25px;
+  bottom: 30px;
+}
+
+.map-pin {
+  position: absolute;
+  background: #b83232;
+  color: white;
+  border: 3px solid white;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  font-weight: bold;
+  box-shadow: 0 2px 8px #0002;
+}
+
+.pin-one {
+  top: 90px;
+  left: 48%;
+}
+
+.pin-two {
+  right: 22%;
+  top: 45%;
+}
+
+.map-caption {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  background: white;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.map-note {
+  color: #65766d;
+  font-size: 12px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.form label {
+  font-weight: bold;
+  margin-top: 8px;
+}
+
+.form input,
+.form select,
+.form textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #bdcec3;
+  border-radius: 8px;
+  background: white;
+  color: #19352d;
+}
+
+.form input:focus,
+.form select:focus,
+.form textarea:focus {
+  outline: 2px solid #24795c;
+  outline-offset: 2px;
+}
+
+.form button {
+  margin-top: 10px;
+  padding: 14px;
+  border: none;
+  border-radius: 9px;
+  background: #176449;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.form button:hover {
+  background: #104c37;
+}
+
+.report-card {
+  padding: 16px;
+  margin-top: 14px;
+  border: 1px solid #e0e9e3;
+  border-radius: 12px;
+}
+
+.report-card h3 {
+  margin-bottom: 6px;
+}
+
+.report-card p {
+  color: #52665d;
+  line-height: 1.5;
+}
+
+.report-category,
+.status {
+  font-size: 12px;
+  padding: 6px 9px;
+  border-radius: 20px;
+}
+
+.report-category {
+  background: #fff0d6;
+  color: #784c0a;
+}
+
+.status {
+  background: #e4f4e9;
+  color: #21623c;
+}
+
+footer {
+  text-align: center;
+  padding: 24px 0;
+  color: #64766d;
+  font-size: 13px;
+}
+
+@media (max-width: 500px) {
+  .app {
+    padding: 12px;
+  }
+
+  .header {
+    padding: 20px;
+  }
+
+  .header h1 {
+    font-size: 29px;
+  }
+
+  .map-section,
+  .report-section,
+  .reports-section {
+    padding: 16px;
+  }
+}
