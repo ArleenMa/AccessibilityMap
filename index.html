@@ -39,20 +39,34 @@
 
   <form id="route-form" class="form">
     <label for="route-start">Starting location</label>
-    <input
-      id="route-start"
-      type="text"
-      placeholder="e.g. Davis Library"
-      required
-    />
+    <div class="location-autocomplete">
+      <input
+        id="route-start"
+        type="text"
+        placeholder="e.g. Davis Library"
+        autocomplete="off"
+        aria-autocomplete="list"
+        aria-controls="route-start-suggestions"
+        aria-expanded="false"
+        required
+      />
+      <div id="route-start-suggestions" class="location-suggestions" role="listbox" aria-label="Starting location suggestions" hidden></div>
+    </div>
 
     <label for="route-end">Destination</label>
-    <input
-      id="route-end"
-      type="text"
-      placeholder="e.g. Kenan Stadium"
-      required
-    />
+    <div class="location-autocomplete">
+      <input
+        id="route-end"
+        type="text"
+        placeholder="e.g. Kenan Stadium"
+        autocomplete="off"
+        aria-autocomplete="list"
+        aria-controls="route-end-suggestions"
+        aria-expanded="false"
+        required
+      />
+      <div id="route-end-suggestions" class="location-suggestions" role="listbox" aria-label="Destination suggestions" hidden></div>
+    </div>
 
     <button id="route-button" type="submit">
       Find walking route
@@ -69,7 +83,10 @@
                     <form id="report-location-search-form" class="location-search" role="search">
                         <label for="report-location-search">Search Location</label>
                         <div class="location-search-controls">
-                            <input id="report-location-search" name="reportLocation" type="search" placeholder="e.g. Davis Library, Chapel Hill" autocomplete="off" required>
+                            <div class="location-autocomplete">
+                                <input id="report-location-search" name="reportLocation" type="search" placeholder="e.g. Davis Library, Chapel Hill" autocomplete="off" aria-autocomplete="list" aria-controls="report-location-suggestions" aria-expanded="false" required>
+                                <div id="report-location-suggestions" class="location-suggestions" role="listbox" aria-label="Report location suggestions" hidden></div>
+                            </div>
                             <button id="report-location-search-button" type="submit">Search</button>
                         </div>
                         <p id="report-location-search-message" class="map-note" aria-live="polite"></p>
@@ -177,6 +194,49 @@ const reportLocationSearchInput = document.getElementById('report-location-searc
 const reportLocationSearchButton = document.getElementById('report-location-search-button');
 const reportLocationSearchMessage = document.getElementById('report-location-search-message');
 let reportLocationMarker = null;
+const selectedSuggestions = new WeakMap();
+
+async function findLocationSuggestions(query, signal) {
+    const parameters = new URLSearchParams({
+        q: query,
+        limit: '5',
+        bbox: '-79.18,35.82,-78.93,36.02',
+        lat: '35.9099',
+        lon: '-79.0475'
+    });
+    const response = await fetch(`https://photon.komoot.io/api/?${parameters}`, { signal });
+    if (!response.ok) {
+        throw new Error(`Location suggestions failed (${response.status}).`);
+    }
+
+    const data = await response.json();
+    return (Array.isArray(data.features) ? data.features : [])
+        .map((feature) => {
+            const coordinates = feature.geometry?.coordinates;
+            const longitude = Number(coordinates?.[0]);
+            const latitude = Number(coordinates?.[1]);
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+            const properties = feature.properties || {};
+            const streetAddress = [properties.housenumber, properties.street]
+                .filter(Boolean)
+                .join(' ');
+            const primary = properties.name || streetAddress || properties.street || properties.type;
+            if (!primary) return null;
+            const locality = [properties.city || properties.locality, properties.state, properties.country]
+                .filter(Boolean)
+                .filter((value, index, values) => values.indexOf(value) === index)
+                .join(', ');
+            const displayName = locality && !primary.includes(locality)
+                ? `${primary}, ${locality}`
+                : primary;
+            return {
+                location: L.latLng(latitude, longitude),
+                displayName
+            };
+        })
+        .filter(Boolean);
+}
 
 async function findLocation(query) {
     const parameters = new URLSearchParams({
@@ -225,8 +285,12 @@ routeForm.addEventListener("submit", async (event) => {
   try {
     // Reuse your existing Chapel Hill location search.
     const [startResult, endResult] = await Promise.all([
-      findLocation(startQuery),
-      findLocation(endQuery)
+      selectedSuggestions.get(routeStartInput)?.displayName === startQuery
+        ? selectedSuggestions.get(routeStartInput)
+        : findLocation(startQuery),
+      selectedSuggestions.get(routeEndInput)?.displayName === endQuery
+        ? selectedSuggestions.get(routeEndInput)
+        : findLocation(endQuery)
     ]);
 
     if (!startResult || !endResult) {
@@ -332,6 +396,130 @@ function selectReportLocation(location, label) {
     submitButton.disabled = false;
 }
 
+function attachLocationAutocomplete(input, onSelect = () => {}) {
+    const suggestions = document.getElementById(input.getAttribute('aria-controls'));
+    let debounceTimer;
+    let activeRequest;
+    let requestNumber = 0;
+    let activeIndex = -1;
+    let results = [];
+
+    const closeSuggestions = () => {
+        suggestions.hidden = true;
+        suggestions.replaceChildren();
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        activeIndex = -1;
+    };
+
+    const selectSuggestion = (index) => {
+        const result = results[index];
+        if (!result) return;
+        input.value = result.displayName;
+        selectedSuggestions.set(input, result);
+        closeSuggestions();
+        onSelect(result);
+    };
+
+    const updateActiveOption = () => {
+        const options = suggestions.querySelectorAll('[role="option"]');
+        options.forEach((option, index) => {
+            option.setAttribute('aria-selected', String(index === activeIndex));
+        });
+        if (activeIndex >= 0 && options[activeIndex]) {
+            input.setAttribute('aria-activedescendant', options[activeIndex].id);
+            options[activeIndex].scrollIntoView({ block: 'nearest' });
+        } else {
+            input.removeAttribute('aria-activedescendant');
+        }
+    };
+
+    input.addEventListener('input', () => {
+        selectedSuggestions.delete(input);
+        window.clearTimeout(debounceTimer);
+        if (activeRequest) activeRequest.abort();
+        const thisRequest = ++requestNumber;
+        const query = input.value.trim();
+        results = [];
+        closeSuggestions();
+        if (query.length < 3) return;
+
+        debounceTimer = window.setTimeout(async () => {
+            activeRequest = new AbortController();
+            try {
+                results = await findLocationSuggestions(query, activeRequest.signal);
+                if (thisRequest !== requestNumber) return;
+                if (results.length === 0) {
+                    const emptyMessage = document.createElement('div');
+                    emptyMessage.className = 'location-suggestion-message';
+                    emptyMessage.setAttribute('role', 'option');
+                    emptyMessage.setAttribute('aria-disabled', 'true');
+                    emptyMessage.textContent = 'No matching locations found nearby.';
+                    suggestions.append(emptyMessage);
+                } else {
+                    results.forEach((result, index) => {
+                        const option = document.createElement('button');
+                        option.type = 'button';
+                        option.id = `${input.id}-suggestion-${index}`;
+                        option.className = 'location-suggestion';
+                        option.setAttribute('role', 'option');
+                        option.setAttribute('aria-selected', 'false');
+                        option.textContent = result.displayName;
+                        option.addEventListener('mousedown', (event) => event.preventDefault());
+                        option.addEventListener('click', () => selectSuggestion(index));
+                        suggestions.append(option);
+                    });
+                }
+                suggestions.hidden = false;
+                input.setAttribute('aria-expanded', 'true');
+            } catch (error) {
+                if (error.name !== 'AbortError' && thisRequest === requestNumber) {
+                    console.error('Unable to load location suggestions:', error);
+                    const errorMessage = document.createElement('div');
+                    errorMessage.className = 'location-suggestion-message';
+                    errorMessage.setAttribute('role', 'option');
+                    errorMessage.setAttribute('aria-disabled', 'true');
+                    errorMessage.textContent = 'Suggestions are temporarily unavailable.';
+                    suggestions.append(errorMessage);
+                    suggestions.hidden = false;
+                    input.setAttribute('aria-expanded', 'true');
+                }
+            }
+        }, 350);
+    });
+
+    input.addEventListener('keydown', (event) => {
+        if (suggestions.hidden) return;
+        const optionCount = results.length;
+        if (event.key === 'ArrowDown' && optionCount > 0) {
+            event.preventDefault();
+            activeIndex = (activeIndex + 1) % optionCount;
+            updateActiveOption();
+        } else if (event.key === 'ArrowUp' && optionCount > 0) {
+            event.preventDefault();
+            activeIndex = activeIndex <= 0 ? optionCount - 1 : activeIndex - 1;
+            updateActiveOption();
+        } else if (event.key === 'Enter' && activeIndex >= 0) {
+            event.preventDefault();
+            selectSuggestion(activeIndex);
+        } else if (event.key === 'Escape') {
+            closeSuggestions();
+        }
+    });
+
+    input.addEventListener('blur', () => {
+        window.setTimeout(closeSuggestions, 100);
+    });
+}
+
+attachLocationAutocomplete(routeStartInput);
+attachLocationAutocomplete(routeEndInput);
+attachLocationAutocomplete(reportLocationSearchInput, (result) => {
+    map.setView(result.location, Math.max(map.getZoom(), 17));
+    selectReportLocation(result.location, result.displayName);
+    reportLocationSearchMessage.textContent = 'Location selected for your report.';
+});
+
 map.on('click', (event) => {
     selectReportLocation(event.latlng, `${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}`);
     reportLocationSearchInput.value = '';
@@ -346,7 +534,10 @@ reportLocationSearchForm.addEventListener('submit', async (event) => {
     reportLocationSearchButton.disabled = true;
     reportLocationSearchMessage.textContent = 'Searching for location...';
     try {
-        const result = await findLocation(query);
+        const selectedResult = selectedSuggestions.get(reportLocationSearchInput);
+        const result = selectedResult?.displayName === query
+            ? selectedResult
+            : await findLocation(query);
         if (!result) {
             reportLocationSearchMessage.textContent = 'No matching location found in the Chapel Hill area. Try a more specific address or place name.';
             return;

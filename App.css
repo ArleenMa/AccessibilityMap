@@ -282,13 +282,57 @@ h2 {
   gap: 8px;
 }
 
-.location-search-controls input {
+.location-autocomplete {
+  position: relative;
   flex: 1;
   min-width: 0;
+}
+
+.location-search-controls input {
+  width: 100%;
   padding: 12px;
   border: 1px solid #bdcec3;
   border-radius: 8px;
   color: #19352d;
+}
+
+.location-suggestions {
+  position: absolute;
+  z-index: 1000;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #bdcec3;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 4px 12px #0002;
+}
+
+.location-suggestion,
+.location-suggestion-message {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: white;
+  color: #19352d;
+  text-align: left;
+}
+
+.location-suggestion {
+  cursor: pointer;
+}
+
+.location-suggestion:hover,
+.location-suggestion[aria-selected="true"] {
+  background: #eaf3ee;
+}
+
+.location-suggestion-message {
+  color: #65766d;
+  font-size: 13px;
 }
 
 .location-search-controls input:focus {
@@ -379,6 +423,20 @@ h2 {
 
 .form button:disabled:hover {
   background: #9dc7d4;
+}
+
+.location-suggestions .location-suggestion {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 0;
+  background: white;
+  color: #19352d;
+  font-weight: normal;
+}
+
+.location-suggestions .location-suggestion:hover,
+.location-suggestions .location-suggestion[aria-selected="true"] {
+  background: #eaf3ee;
 }
 
 .report-card {
