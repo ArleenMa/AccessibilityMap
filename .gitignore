@@ -1,0 +1,12 @@
+# Local credentials
+.env
+.env.*
+!.env.example
+
+# Dependencies and generated output
+node_modules/
+dist/
+
+# Local operating-system and log files
+.DS_Store
+*.log

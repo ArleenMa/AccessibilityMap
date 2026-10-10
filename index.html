@@ -34,6 +34,37 @@
             </section>
 
             <aside class="sidebar">
+
+<section class="report-section">
+  <h2>Find a route</h2>
+  <p>Choose where you want to start and where you want to go.</p>
+
+  <form id="route-form" class="form">
+    <label for="route-start">Starting location</label>
+    <input
+      id="route-start"
+      type="text"
+      placeholder="e.g. Davis Library"
+      required
+    />
+
+    <label for="route-end">Destination</label>
+    <input
+      id="route-end"
+      type="text"
+      placeholder="e.g. Kenan Stadium"
+      required
+    />
+
+    <button id="route-button" type="submit">
+      Find walking route
+    </button>
+  </form>
+
+  <div id="route-status" class="map-note"
+       role="status" aria-live="polite"></div>
+</section>
+
                 <section class="report-section">
                     <h2>Report an issue</h2>
                     <p>Search for the issue location or click the map, then add the issue details.</p>
@@ -171,6 +202,128 @@ async function findLocation(query) {
     }
     return { location: L.latLng(latitude, longitude), displayName: result.display_name };
 }
+
+const routeForm = document.getElementById("route-form");
+const routeStartInput = document.getElementById("route-start");
+const routeEndInput = document.getElementById("route-end");
+const routeButton = document.getElementById("route-button");
+const routeStatus = document.getElementById("route-status");
+
+let routeLayer = null;
+let routeStartMarker = null;
+let routeEndMarker = null;
+
+routeForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const startQuery = routeStartInput.value.trim();
+  const endQuery = routeEndInput.value.trim();
+
+  if (!startQuery || !endQuery) return;
+
+  routeButton.disabled = true;
+  routeStatus.textContent = "Finding locations and calculating route...";
+
+  try {
+    // Reuse your existing Chapel Hill location search.
+    const [startResult, endResult] = await Promise.all([
+      findLocation(startQuery),
+      findLocation(endQuery)
+    ]);
+
+    if (!startResult || !endResult) {
+      throw new Error(
+        "Could not find one or both locations. Try more specific names or addresses."
+      );
+    }
+
+    // OpenRouteService expects coordinates in [longitude, latitude] order.
+    const coordinates = [
+      [
+        startResult.location.lng,
+        startResult.location.lat
+      ],
+      [
+        endResult.location.lng,
+        endResult.location.lat
+      ]
+    ];
+
+    const response = await fetch("/api/route", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ coordinates })
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        result.error || `Routing request failed (${response.status}).`
+      );
+    }
+
+    const feature = result.feature;
+    if (!feature?.geometry) {
+      throw new Error("The routing service returned no route.");
+    }
+
+    // Remove the previous route and its endpoint markers.
+    if (routeLayer) map.removeLayer(routeLayer);
+    if (routeStartMarker) map.removeLayer(routeStartMarker);
+    if (routeEndMarker) map.removeLayer(routeEndMarker);
+
+    // Draw the new walking route on your existing Leaflet map.
+    routeLayer = L.geoJSON(feature, {
+      style: {
+        color: "#176449",
+        weight: 6,
+        opacity: 0.9
+      }
+    }).addTo(map);
+
+    routeStartMarker = L.marker(startResult.location)
+      .addTo(map)
+      .bindPopup("Starting location");
+
+    routeEndMarker = L.marker(endResult.location)
+      .addTo(map)
+      .bindPopup("Destination");
+
+    // Zoom the map to show the entire route.
+    map.fitBounds(routeLayer.getBounds(), {
+      padding: [35, 35]
+    });
+
+    const summary = feature.properties?.summary;
+    const distance = summary?.distance;
+    const duration = summary?.duration;
+
+    if (Number.isFinite(distance) &&
+        Number.isFinite(duration)) {
+      const distanceText = distance >= 1000
+        ? `${(distance / 1000).toFixed(2)} km`
+        : `${Math.round(distance)} m`;
+
+      const minutes = Math.round(duration / 60);
+
+      routeStatus.textContent =
+        `Route found: ${distanceText}, approximately ${minutes} minutes. ` +
+        "Check the route on the map before traveling.";
+    } else {
+      routeStatus.textContent =
+        "Route displayed. Check the map before traveling.";
+    }
+  } catch (error) {
+    console.error("Routing error:", error);
+    routeStatus.textContent =
+      error.message || "Unable to calculate the route. Please try again.";
+  } finally {
+    routeButton.disabled = false;
+  }
+});
+
 
 function selectReportLocation(location, label) {
     selectedLocation = location;
