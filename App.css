@@ -203,6 +203,11 @@ h2 {
   outline-offset: 2px;
 }
 
+.form textarea {
+  resize: vertical;
+  min-height: 76px;
+}
+
 .form button {
   margin-top: 10px;
   padding: 14px;
@@ -214,8 +219,17 @@ h2 {
   cursor: pointer;
 }
 
+.form button:disabled {
+  background: #9aaba2;
+  cursor: not-allowed;
+}
+
 .form button:hover {
   background: #104c37;
+}
+
+.form button:disabled:hover {
+  background: #9aaba2;
 }
 
 .report-card {
