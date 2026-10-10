@@ -118,6 +118,7 @@ reportForm.addEventListener('submit', (event) => {
     deleteButton.textContent = 'Delete';
     deleteButton.addEventListener('click', () => {
         map.removeLayer(newMarker);
+        reportCard.remove();
     });
     popupContent.append(deleteButton);
     newMarker.bindPopup(popupContent).openPopup();
