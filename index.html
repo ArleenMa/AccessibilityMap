@@ -2,7 +2,6 @@
 <html>
 <head>
     <title>Accessibility Map</title>
-    <!-- Link Leaflet's Style Sheet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="App.css" />
     
@@ -15,7 +14,6 @@
                 <div class="eyebrow">ACCESSIBILITY MAP</div>
                 <h1>Find and report inaccessible spots</h1>
             </div>
-            <div class="access-icon">&#9855;</div>
         </header>
 
         <section class="welcome">
@@ -222,6 +220,7 @@ reportForm.addEventListener('submit', (event) => {
     event.preventDefault();
     if (!selectedLocation || !reportForm.reportValidity()) return;
 
+    const reportLatLng = selectedLocation;
     const category = issueType.value;
     const description = issueDescription.value.trim();
     const severity = document.querySelector('input[name="severity"]:checked')?.value || 'Not specified';
@@ -298,6 +297,11 @@ reportForm.addEventListener('submit', (event) => {
 
     const reportCard = document.createElement('article');
     reportCard.className = 'report-card';
+    reportCard.style.cursor = 'pointer';
+    reportCard.addEventListener('click', () => {
+        map.setView(reportLatLng, 18);
+        newHighlight.openPopup();
+    });
     const cardTop = document.createElement('div');
     cardTop.className = 'report-card-top';
     const locationHeading = document.createElement('h3');
