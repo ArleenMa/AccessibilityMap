@@ -4,6 +4,7 @@
     <title>Accessibility Map</title>
     <!-- Link Leaflet's Style Sheet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="App.css" />
     
     <style>
         /* Give the map a size, otherwise it stays invisible */
@@ -12,13 +13,89 @@
 </head>
 <body>
 
-    <!-- This blank box is where your map will actually sit -->
-    <div id="map"></div>
+    <div class="app">
+        <header class="header">
+            <div>
+                <div class="eyebrow">ACCESSIBILITY MAP</div>
+                <h1>Find and report accessible spots</h1>
+            </div>
+            <div class="access-icon">&#9855;</div>
+        </header>
+
+        <section class="welcome">
+            <h2>Welcome</h2>
+            <p>Click the map to drop a pin and leave a note about accessibility at that location.</p>
+        </section>
+
+        <section class="map-section">
+            <div class="section-heading">
+                <h2>Map</h2>
+                <span class="demo-label">LIVE MAP</span>
+            </div>
+            <!-- This blank box is where your map will actually sit -->
+            <div id="map"></div>
+        </section>
+
+        <section class="report-section">
+            <div class="section-heading">
+                <h2>Submit a Report</h2>
+            </div>
+            <p>Click anywhere on the map above to add a report, or fill out the form below.</p>
+            <form class="form">
+                <label for="location">Location</label>
+                <input type="text" id="location" name="location" placeholder="e.g. Main St & 5th Ave" />
+
+                <label for="category">Category</label>
+                <select id="category" name="category">
+                    <option>Ramp</option>
+                    <option>Elevator</option>
+                    <option>Sidewalk</option>
+                    <option>Construction</option>
+                </select>
+
+                <label for="details">Details</label>
+                <textarea id="details" name="details" rows="4" placeholder="Describe the issue"></textarea>
+
+                <button type="submit">Submit Report</button>
+            </form>
+        </section>
+
+        <section class="reports-section">
+            <div class="section-heading">
+                <h2>Recent Reports</h2>
+            </div>
+            <div class="report-card">
+                <div class="report-card-top">
+                    <h3>Main St & 5th Ave</h3>
+                    <span class="status">Open</span>
+                </div>
+                <p>Sidewalk ramp is blocked by construction equipment.</p>
+                <span class="report-category">Construction</span>
+            </div>
+        </section>
+
+        <footer>Accessibility Map &mdash; built with Leaflet &amp; OpenStreetMap</footer>
+    </div>
 
     <!-- Link Leaflet's JavaScript Brains -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
 const map = L.map('map').setView([35.90994468032028, -79.04754342458565], 50);
+const popup = new L.Popup();
+
+function onMapClick(e) {
+    popup
+        .setLatLng(e.latlng)
+        .setContent(e.latlng.toString())
+        .openOn(map);
+}
+function addMarker(e){
+    var userMessage = prompt("Enter a custom note for this location:");
+    var newMarker = new L.marker(e.latlng).addTo(map);
+    newMarker.bindPopup(userMessage).openPopup();
+}
+map.on('click', addMarker);
+
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
