@@ -27,7 +27,7 @@ textarea {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  background: #164e3d;
+  background: #4B9CD3;
   color: white;
   padding: 28px;
   border-radius: 20px;
@@ -43,10 +43,6 @@ textarea {
   font-size: 36px;
 }
 
-.access-icon {
-  font-size: 42px;
-}
-
 .welcome {
   padding: 20px 0;
 }
@@ -57,7 +53,7 @@ h2 {
 
 .welcome p,
 .report-section > p {
-  color: #52665d;
+  color: #000000;
   line-height: 1.6;
 }
 
@@ -242,7 +238,7 @@ h2 {
   padding: 14px;
   border: none;
   border-radius: 9px;
-  background: #176449;
+  background: #4B9CD3;
   color: white;
   font-weight: bold;
   cursor: pointer;
@@ -304,7 +300,7 @@ h2 {
   padding: 12px 18px;
   border: none;
   border-radius: 8px;
-  background: #176449;
+  background: #4B9CD3;
   color: white;
   font-weight: bold;
   cursor: pointer;
@@ -373,16 +369,16 @@ h2 {
 }
 
 .form button:disabled {
-  background: #9aaba2;
+  background: #9dc7d4;
   cursor: not-allowed;
 }
 
 .form button:hover {
-  background: #104c37;
+  background: #4B9CD3;
 }
 
 .form button:disabled:hover {
-  background: #9aaba2;
+  background: #9dc7d4;
 }
 
 .report-card {
