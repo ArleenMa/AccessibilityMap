@@ -16,11 +16,6 @@
             </div>
         </header>
 
-        <section class="welcome">
-            <h2>Welcome</h2>
-            <p>Click the map to choose a location, then report an accessibility issue.</p>
-        </section>
-
         <div class="map-layout">
             <section class="map-section">
                 <div class="section-heading">
@@ -33,7 +28,12 @@
 
             <aside class="sidebar">
 
-<section class="report-section">
+<div class="workflow-tabs" role="tablist" aria-label="Map actions">
+  <button id="route-tab" class="workflow-tab" type="button" role="tab" aria-selected="true" aria-controls="route-panel" tabindex="0">Find a route</button>
+  <button id="report-tab" class="workflow-tab" type="button" role="tab" aria-selected="false" aria-controls="report-panel" tabindex="-1">Report an issue</button>
+</div>
+
+<section id="route-panel" class="report-section workflow-panel" role="tabpanel" aria-labelledby="route-tab">
   <h2>Find a route</h2>
   <p>Choose where you want to start and where you want to go.</p>
 
@@ -84,7 +84,7 @@
        role="status" aria-live="polite"></div>
 </section>
 
-                <section class="report-section">
+                <section id="report-panel" class="report-section workflow-panel" role="tabpanel" aria-labelledby="report-tab" hidden>
                     <h2>Report an issue</h2>
                     <p>Search to center the map, then click the map to mark the issue area's start and end points.</p>
                     <form id="report-location-search-form" class="location-search" role="search">
@@ -290,6 +290,37 @@ const routeEndInput = document.getElementById("route-end");
 const routeButton = document.getElementById("route-button");
 const routeStatus = document.getElementById("route-status");
 const routeAvoidance = document.getElementById("route-avoidance");
+const workflowTabs = [...document.querySelectorAll('.workflow-tab')];
+
+function activateWorkflowTab(tab, moveFocus = false) {
+    workflowTabs.forEach((workflowTab) => {
+        const isSelected = workflowTab === tab;
+        workflowTab.setAttribute('aria-selected', String(isSelected));
+        workflowTab.tabIndex = isSelected ? 0 : -1;
+        document.getElementById(workflowTab.getAttribute('aria-controls')).hidden = !isSelected;
+    });
+    if (moveFocus) tab.focus();
+}
+
+workflowTabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => activateWorkflowTab(tab));
+    tab.addEventListener('keydown', (event) => {
+        let nextIndex;
+        if (event.key === 'ArrowRight') {
+            nextIndex = (index + 1) % workflowTabs.length;
+        } else if (event.key === 'ArrowLeft') {
+            nextIndex = (index - 1 + workflowTabs.length) % workflowTabs.length;
+        } else if (event.key === 'Home') {
+            nextIndex = 0;
+        } else if (event.key === 'End') {
+            nextIndex = workflowTabs.length - 1;
+        } else {
+            return;
+        }
+        event.preventDefault();
+        activateWorkflowTab(workflowTabs[nextIndex], true);
+    });
+});
 
 let routeLayer = null;
 let routeStartMarker = null;
