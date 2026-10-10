@@ -6,10 +6,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="App.css" />
     
-    <style>
-        /* Give the map a size, otherwise it stays invisible */
-        #map { height: 500px; width: 100%; }
-    </style>
 </head>
 <body>
 
@@ -27,44 +23,62 @@
             <p>Click the map to choose a location, then report an accessibility issue.</p>
         </section>
 
-        <section class="map-section">
-            <div class="section-heading">
-                <h2>Map</h2>
-                <span class="demo-label">LIVE MAP</span>
-            </div>
-            <!-- This blank box is where your map will actually sit -->
-            <div id="map"></div>
-        </section>
-
-        <section class="report-section">
-            <h2>Report an issue</h2>
-            <p>Choose a location on the map, then add the issue details.</p>
-            <p id="selected-location" class="map-note" aria-live="polite">No location selected. Click the map to choose one.</p>
-            <form id="report-form" class="form">
-                <label for="issue-type">Type of issue</label>
-                <select id="issue-type" name="issueType" required>
-                    <option value="" disabled selected>Select an issue</option>
-                    <option value="Construction">Construction</option>
-                    <option value="Blocked sidewalk">Blocked sidewalk</option>
-                    <option value="Broken elevator">Broken elevator</option>
-                    <option value="Inaccessible ramp">Inaccessible ramp</option>
-                    <option value="Other">Other</option>
-                </select>
-                <div id="other-description-field" hidden>
-                    <label for="issue-description">Short description</label>
-                    <textarea id="issue-description" name="description" rows="3" maxlength="160" placeholder="Describe the issue (160 characters max)"></textarea>
+        <div class="map-layout">
+            <section class="map-section">
+                <div class="section-heading">
+                    <h2>Map</h2>
+                    <span class="demo-label">LIVE MAP</span>
                 </div>
-                <button id="submit-report" type="submit" disabled>Submit report</button>
-            </form>
-        </section>
+                <form id="location-search-form" class="location-search" role="search">
+                    <label for="location-search">Search within the Chapel Hill area</label>
+                    <div class="location-search-controls">
+                        <input id="location-search" name="location" type="search" placeholder="e.g. 123 Main St or UNC Chapel Hill" autocomplete="off" required>
+                        <button id="location-search-button" type="submit">Search</button>
+                    </div>
+                    <p id="location-search-message" class="map-note" aria-live="polite"></p>
+                </form>
+                <div id="map"></div>
+            </section>
 
-        <section class="reports-section">
-            <div class="section-heading">
-                <h2>Recent Reports</h2>
-            </div>
-            <div id="recent-reports">
-            
-        </section>
+            <aside class="sidebar">
+                <section class="report-section">
+                    <h2>Report an issue</h2>
+                    <p>Search for the issue location or click the map, then add the issue details.</p>
+                    <form id="report-location-search-form" class="location-search" role="search">
+                        <label for="report-location-search">Search for an issue location in Chapel Hill</label>
+                        <div class="location-search-controls">
+                            <input id="report-location-search" name="reportLocation" type="search" placeholder="e.g. Davis Library, Chapel Hill" autocomplete="off" required>
+                            <button id="report-location-search-button" type="submit">Search</button>
+                        </div>
+                        <p id="report-location-search-message" class="map-note" aria-live="polite"></p>
+                    </form>
+                    <p id="selected-location" class="map-note" aria-live="polite">No location selected. Search above or click the map.</p>
+                    <form id="report-form" class="form">
+                        <label for="issue-type">Type of issue</label>
+                        <select id="issue-type" name="issueType" required>
+                            <option value="" disabled selected>Select an issue</option>
+                            <option value="Construction">Construction</option>
+                            <option value="Blocked sidewalk">Blocked sidewalk</option>
+                            <option value="Broken elevator">Broken elevator</option>
+                            <option value="Inaccessible ramp">Inaccessible ramp</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <div id="other-description-field" hidden>
+                            <label for="issue-description">Short description</label>
+                            <textarea id="issue-description" name="description" rows="3" maxlength="160" placeholder="Describe the issue (160 characters max)"></textarea>
+                        </div>
+                        <button id="submit-report" type="submit" disabled>Submit report</button>
+                    </form>
+                </section>
+
+                <section class="reports-section">
+                    <div class="section-heading">
+                        <h2>Recent Reports</h2>
+                    </div>
+                    <div id="recent-reports"></div>
+                </section>
+            </aside>
+        </div>
 
         <footer>Accessibility Map &mdash; built with Leaflet &amp; OpenStreetMap</footer>
     </div>
@@ -82,11 +96,103 @@ const issueDescription = document.getElementById('issue-description');
 const reportForm = document.getElementById('report-form');
 const submitButton = document.getElementById('submit-report');
 const recentReports = document.getElementById('recent-reports');
+const locationSearchForm = document.getElementById('location-search-form');
+const locationSearchInput = document.getElementById('location-search');
+const locationSearchButton = document.getElementById('location-search-button');
+const locationSearchMessage = document.getElementById('location-search-message');
+const reportLocationSearchForm = document.getElementById('report-location-search-form');
+const reportLocationSearchInput = document.getElementById('report-location-search');
+const reportLocationSearchButton = document.getElementById('report-location-search-button');
+const reportLocationSearchMessage = document.getElementById('report-location-search-message');
+let mapSearchMarker = null;
+let reportLocationMarker = null;
+
+async function findLocation(query) {
+    const parameters = new URLSearchParams({
+        q: query,
+        format: 'jsonv2',
+        limit: '1',
+        viewbox: '-79.18,36.02,-78.93,35.82',
+        bounded: '1'
+    });
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?${parameters}`);
+    if (!response.ok) {
+        throw new Error(`Location search failed (${response.status}).`);
+    }
+
+    const results = await response.json();
+    const result = Array.isArray(results) ? results[0] : null;
+    const latitude = result ? Number(result.lat) : NaN;
+    const longitude = result ? Number(result.lon) : NaN;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return null;
+    }
+    return { location: L.latLng(latitude, longitude), displayName: result.display_name };
+}
+
+function selectReportLocation(location, label) {
+    selectedLocation = location;
+    if (reportLocationMarker) map.removeLayer(reportLocationMarker);
+    reportLocationMarker = L.marker(selectedLocation).addTo(map);
+    locationMessage.textContent = `Issue location selected: ${label}`;
+    submitButton.disabled = false;
+}
 
 map.on('click', (event) => {
-    selectedLocation = event.latlng;
-    locationMessage.textContent = `Location selected: ${selectedLocation.lat.toFixed(5)}, ${selectedLocation.lng.toFixed(5)}`;
-    submitButton.disabled = false;
+    selectReportLocation(event.latlng, `${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}`);
+    reportLocationSearchInput.value = '';
+    reportLocationSearchMessage.textContent = '';
+});
+
+locationSearchForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const query = locationSearchInput.value.trim();
+    if (!query) return;
+
+    locationSearchButton.disabled = true;
+    locationSearchMessage.textContent = 'Searching for location...';
+    try {
+        const result = await findLocation(query);
+        if (!result) {
+            locationSearchMessage.textContent = 'No matching location found in the Chapel Hill area. Try a more specific address or place name.';
+            return;
+        }
+
+        map.setView(result.location, Math.max(map.getZoom(), 17));
+        if (mapSearchMarker) map.removeLayer(mapSearchMarker);
+        mapSearchMarker = L.marker(result.location).addTo(map);
+        locationSearchMessage.textContent = result.displayName || 'Map centered on this location.';
+    } catch (error) {
+        console.error('Unable to search for location:', error);
+        locationSearchMessage.textContent = 'Unable to search right now. Please try again.';
+    } finally {
+        locationSearchButton.disabled = false;
+    }
+});
+
+reportLocationSearchForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const query = reportLocationSearchInput.value.trim();
+    if (!query) return;
+
+    reportLocationSearchButton.disabled = true;
+    reportLocationSearchMessage.textContent = 'Searching for location...';
+    try {
+        const result = await findLocation(query);
+        if (!result) {
+            reportLocationSearchMessage.textContent = 'No matching location found in the Chapel Hill area. Try a more specific address or place name.';
+            return;
+        }
+
+        map.setView(result.location, Math.max(map.getZoom(), 17));
+        selectReportLocation(result.location, result.displayName || `${result.location.lat.toFixed(5)}, ${result.location.lng.toFixed(5)}`);
+        reportLocationSearchMessage.textContent = 'Location selected for your report.';
+    } catch (error) {
+        console.error('Unable to search for report location:', error);
+        reportLocationSearchMessage.textContent = 'Unable to search right now. Please try again.';
+    } finally {
+        reportLocationSearchButton.disabled = false;
+    }
 });
 
 issueType.addEventListener('change', () => {
@@ -114,6 +220,10 @@ reportForm.addEventListener('submit', (event) => {
         popupContent.append(popupDescription);
     }
     const newMarker = L.marker(selectedLocation).addTo(map);
+    if (reportLocationMarker) {
+        map.removeLayer(reportLocationMarker);
+        reportLocationMarker = null;
+    }
     const deleteButton = document.createElement('button');
     deleteButton.textContent = 'Delete';
     deleteButton.addEventListener('click', () => {
@@ -149,7 +259,9 @@ reportForm.addEventListener('submit', (event) => {
     descriptionField.hidden = true;
     issueDescription.required = false;
     selectedLocation = null;
-    locationMessage.textContent = 'No location selected. Click the map to choose one.';
+    locationMessage.textContent = 'No location selected. Search above or click the map.';
+    reportLocationSearchInput.value = '';
+    reportLocationSearchMessage.textContent = '';
     submitButton.disabled = true;
 });
 
