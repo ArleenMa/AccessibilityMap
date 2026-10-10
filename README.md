@@ -17,7 +17,7 @@ The Node server serves the app and forwards walking-route requests to OpenRouteS
 
 - Search Chapel Hill locations and select a location for an issue report.
 - Report construction, blocked sidewalks, broken elevators, inaccessible ramps, and other issues with severity and expected duration.
-- View and delete issue reports during the current browser session.
+- View and delete issue reports during the current browser session; click a report card to zoom the map to that location.
 - Find and display a walking route between two Chapel Hill locations.
 
 Map tiles and location search use OpenStreetMap services. Issue reports are currently held in the browser and are not persisted between sessions.
