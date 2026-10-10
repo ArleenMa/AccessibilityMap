@@ -296,7 +296,7 @@ let routeStartMarker = null;
 let routeEndMarker = null;
 const reportedIssues = [];
 
-function issueExclusionPolygon(location, radiusMeters = 25) {
+function circleExclusionPolygon(location, radiusMeters = 25) {
   const earthRadiusMeters = 6371008.8;
   const latitude = location.lat * Math.PI / 180;
   const longitude = location.lng * Math.PI / 180;
@@ -321,6 +321,45 @@ function issueExclusionPolygon(location, radiusMeters = 25) {
 
   ring.push(ring[0]);
   return ring;
+}
+
+function lineExclusionPolygon(start, end, halfWidthMeters = 10) {
+  const metersPerDegreeLat = 111320;
+  const metersPerDegreeLng =
+    111320 * Math.cos(((start.lat + end.lat) / 2) * Math.PI / 180);
+
+  // Convert the end point to meters relative to the start point.
+  const x2 = (end.lng - start.lng) * metersPerDegreeLng;
+  const y2 = (end.lat - start.lat) * metersPerDegreeLat;
+  const angle = Math.atan2(y2, x2);
+
+  const points = [];
+  const steps = 8; // smoothness of each rounded end
+
+  // Rounded cap around the end point
+  for (let i = 0; i <= steps; i += 1) {
+    const a = angle - Math.PI / 2 + Math.PI * i / steps;
+    points.push([x2 + halfWidthMeters * Math.cos(a), y2 + halfWidthMeters * Math.sin(a)]);
+  }
+  // Rounded cap around the start point
+  for (let i = 0; i <= steps; i += 1) {
+    const a = angle + Math.PI / 2 + Math.PI * i / steps;
+    points.push([halfWidthMeters * Math.cos(a), halfWidthMeters * Math.sin(a)]);
+  }
+
+  // Convert back to [lng, lat] (GeoJSON order, which Valhalla expects)
+  const ring = points.map(([x, y]) => [
+    start.lng + x / metersPerDegreeLng,
+    start.lat + y / metersPerDegreeLat
+  ]);
+  ring.push(ring[0]); // close the polygon
+  return ring;
+}
+
+function issueExclusionPolygon(issue) {
+  return issue.shape === 'line'
+    ? lineExclusionPolygon(issue.start, issue.end)
+    : circleExclusionPolygon(issue.location, issue.radius);
 }
 
 function formatMapLocation(location) {
@@ -477,9 +516,7 @@ const routingRequest = {
   format: "osrm",
   shape_format: "geojson",
   ...(excludedIssues.length > 0 && {
-    exclude_polygons: excludedIssues.map(({ location, radius }) =>
-    issueExclusionPolygon(location, radius)
-    )
+    exclude_polygons: excludedIssues.map(issueExclusionPolygon)
   })
 };
 
@@ -816,7 +853,13 @@ reportForm.addEventListener('submit', (event) => {
             fillOpacity: highlightOpacity,
             weight: 2
         }).addTo(map);
-    const reportedIssue = { location: reportLatLng, radius: issueRadiusMeters, severity };
+    const reportedIssue = { 
+        shape: isLineIssue ? 'line': 'circle',
+        location: reportLatLng, 
+        radius: issueRadiusMeters, 
+        start: issueStartLocation,
+        end: issueEndLocation,
+        severity };
     reportedIssues.push(reportedIssue);
     [reportStartMarker, reportEndMarker, reportPreviewLayer].forEach((layer) => {
         if (layer) map.removeLayer(layer);
