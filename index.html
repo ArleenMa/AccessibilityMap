@@ -102,6 +102,9 @@ reportForm.addEventListener('submit', (event) => {
     const category = issueType.value;
     const description = issueDescription.value.trim();
     const popupContent = document.createElement('div');
+    popupContent.style.display="flex";
+    popupContent.style.flexDirection="column";
+    popupContent.style.gap="10px";
     const popupTitle = document.createElement('strong');
     popupTitle.textContent = category;
     popupContent.append(popupTitle);
@@ -110,7 +113,14 @@ reportForm.addEventListener('submit', (event) => {
         popupDescription.textContent = description;
         popupContent.append(popupDescription);
     }
-    L.marker(selectedLocation).addTo(map).bindPopup(popupContent).openPopup();
+    const newMarker = L.marker(selectedLocation).addTo(map);
+    const deleteButton = document.createElement('button');
+    deleteButton.textContent = 'Delete';
+    deleteButton.addEventListener('click', () => {
+        map.removeLayer(newMarker);
+    });
+    popupContent.append(deleteButton);
+    newMarker.bindPopup(popupContent).openPopup();
 
     const reportCard = document.createElement('article');
     reportCard.className = 'report-card';

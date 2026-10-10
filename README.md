@@ -4,4 +4,4 @@ Copyright (c) 2010-2011, CloudMade
 All rights reserved.
 
 AI usage: 
-Use of Claude Code to set up basic Leaflet map
+Use of Claude Code to set up Leaflet map.
