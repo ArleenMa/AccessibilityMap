@@ -216,9 +216,10 @@ h2 {
   line-height: 1.5;
 }
 
-.choice-option input {
+.choice-option input[type="radio"] {
   margin-top: 3px;
   width: auto;
+  flex: 0 0 auto;
 }
 
 .form input:focus,
