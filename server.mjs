@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getReports, insertReport, resolveReport } from './db.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3000);
@@ -75,6 +76,58 @@ function validCoordinates(coordinates) {
             point[1] >= 35.82 &&
             point[1] <= 36.02
         );
+}
+
+function inBounds(lat, lng) {
+    return Number.isFinite(lat) && Number.isFinite(lng) &&
+        lng >= -79.18 && lng <= -78.93 &&
+        lat >= 35.82 && lat <= 36.02;
+}
+
+function validReport(body) {
+    return body &&
+        (body.shape === 'line' || body.shape === 'circle') &&
+        Number.isFinite(body.radius) &&
+        inBounds(body.lat, body.lng) &&
+        inBounds(body.startLat, body.startLng) &&
+        inBounds(body.endLat, body.endLng) &&
+        typeof body.category === 'string' && body.category.trim().length > 0 &&
+        typeof body.severity === 'string' && body.severity.trim().length > 0 &&
+        (body.description === undefined || typeof body.description === 'string') &&
+        (body.expectedDuration === undefined || typeof body.expectedDuration === 'string') &&
+        (body.locationLabel === undefined || typeof body.locationLabel === 'string');
+}
+
+async function handleReports(request, response, pathname) {
+    if (pathname === '/api/reports' && request.method === 'GET') {
+        sendJson(response, 200, { reports: getReports() });
+        return;
+    }
+
+    if (pathname === '/api/reports' && request.method === 'POST') {
+        const body = await readJsonBody(request);
+        if (!validReport(body)) {
+            sendJson(response, 400, { error: 'Provide a valid report within the Chapel Hill area.' });
+            return;
+        }
+        const report = insertReport(body);
+        sendJson(response, 201, { report });
+        return;
+    }
+
+    const resolveMatch = pathname.match(/^\/api\/reports\/(\d+)\/resolve$/);
+    if (resolveMatch && request.method === 'POST') {
+        const report = resolveReport(Number(resolveMatch[1]));
+        if (!report) {
+            sendJson(response, 404, { error: 'Report not found.' });
+            return;
+        }
+        sendJson(response, 200, { report });
+        return;
+    }
+
+    response.writeHead(405, { Allow: 'GET, POST' });
+    response.end();
 }
 
 async function handleRoute(request, response) {
@@ -151,6 +204,22 @@ const server = createServer(async (request, response) => {
                 error: error.status
                     ? error.message
                     : 'Unable to contact the routing service. Please try again.'
+            });
+        }
+        return;
+    }
+
+    if (pathname === '/api/reports' || pathname.startsWith('/api/reports/')) {
+        try {
+            await handleReports(request, response, pathname);
+        } catch (error) {
+            if (response.headersSent) {
+                response.destroy(error);
+                return;
+            }
+            console.error('Reports request failed:', error);
+            sendJson(response, error.status || 500, {
+                error: error.status ? error.message : 'Unable to process this report request.'
             });
         }
         return;

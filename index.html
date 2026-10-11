@@ -482,6 +482,155 @@ function setIssueAreaEnd(location) {
     locationMessage.textContent = `Issue area selected from ${formatMapLocation(issueStartLocation)} to ${formatMapLocation(issueEndLocation)} (${Math.round(distanceMeters)} m across). Adjust the points by clicking the map again, or submit the report.`;
 }
 
+function renderReport({ id, shape, category, description, severity, expectedDuration, location, radius, start, end, locationLabel }) {
+    const popupContent = document.createElement('div');
+    popupContent.style.display = "flex";
+    popupContent.style.flexDirection = "column";
+    popupContent.style.gap = "10px";
+    const popupTitle = document.createElement('strong');
+    popupTitle.textContent = category;
+    popupContent.append(popupTitle);
+
+    const popupSeverity = document.createElement('p');
+    popupSeverity.textContent = `Severity: ${severity}`;
+    popupContent.append(popupSeverity);
+
+    const popupDuration = document.createElement('p');
+    popupDuration.textContent = `Expected duration: ${expectedDuration || 'Not specified'}`;
+    popupContent.append(popupDuration);
+
+    if (description) {
+        const popupDescription = document.createElement('p');
+        popupDescription.textContent = description;
+        popupContent.append(popupDescription);
+    }
+
+    const highlightColor = issueColors[category] || issueColors.Other;
+    const severityOpacity = { Minor: 0.15, Moderate: 0.3, Severe: 0.5 };
+    const highlightOpacity = severityOpacity[severity] || severityOpacity.Minor;
+    const isLineIssue = shape === 'line';
+    const newHighlight = isLineIssue
+        ? L.polyline([start, end], {
+            color: highlightColor,
+            opacity: highlightOpacity + 0.5,
+            weight: 6
+        }).addTo(map)
+        : L.circle(location, {
+            radius,
+            color: highlightColor,
+            fillColor: highlightColor,
+            opacity: highlightOpacity,
+            fillOpacity: highlightOpacity,
+            weight: 2
+        }).addTo(map);
+
+    const reportedIssue = { id, shape, location, radius, start, end, severity };
+    reportedIssues.push(reportedIssue);
+
+    const deleteButton = document.createElement('button');
+    deleteButton.textContent = 'Mark as Resolved';
+    deleteButton.addEventListener('click', async () => {
+        deleteButton.disabled = true;
+        try {
+            const response = await fetch(`/api/reports/${id}/resolve`, { method: 'POST' });
+            if (!response.ok) throw new Error(`Resolve failed (${response.status}).`);
+        } catch (error) {
+            console.error('Unable to mark report as resolved:', error);
+            deleteButton.disabled = false;
+            return;
+        }
+        const issueIndex = reportedIssues.indexOf(reportedIssue);
+        if (issueIndex !== -1) reportedIssues.splice(issueIndex, 1);
+        map.removeLayer(newHighlight);
+        reportCard.remove();
+    });
+    popupContent.append(deleteButton);
+    newHighlight.bindPopup(popupContent);
+
+    let popupCloseTimeout;
+    const schedulePopupClose = () => {
+        window.clearTimeout(popupCloseTimeout);
+        popupCloseTimeout = window.setTimeout(() => {
+            const popupElement = newHighlight.getPopup().getElement();
+            if (!popupElement?.matches(':hover')) newHighlight.closePopup();
+        }, 200);
+    };
+
+    newHighlight.on('mouseover', () => {
+        window.clearTimeout(popupCloseTimeout);
+        newHighlight.openPopup();
+    });
+    newHighlight.on('mouseout', schedulePopupClose);
+    newHighlight.on('popupopen', (event) => {
+        const popupElement = event.popup.getElement();
+        popupElement.addEventListener('mouseenter', () => window.clearTimeout(popupCloseTimeout));
+        popupElement.addEventListener('mouseleave', schedulePopupClose);
+    });
+
+    const reportCard = document.createElement('article');
+    reportCard.className = 'report-card';
+    reportCard.style.cursor = 'pointer';
+    reportCard.addEventListener('click', () => {
+        map.setView(location, 18);
+        newHighlight.openPopup();
+    });
+    const cardTop = document.createElement('div');
+    cardTop.className = 'report-card-top';
+    const locationHeading = document.createElement('h3');
+    locationHeading.textContent = `${locationLabel || formatMapLocation(location)} (${Math.round(radius * 2)} m ${isLineIssue ? 'long' : 'across'})`;
+    cardTop.append(locationHeading);
+    reportCard.append(cardTop);
+    if (description) {
+        const reportDescription = document.createElement('p');
+        reportDescription.textContent = description;
+        reportCard.append(reportDescription);
+    }
+    const meta = document.createElement('div');
+    meta.className = 'report-meta';
+    const categoryLabel = document.createElement('span');
+    categoryLabel.className = 'report-category';
+    categoryLabel.textContent = category;
+    const severityLabel = document.createElement('span');
+    severityLabel.className = 'report-severity';
+    severityLabel.textContent = `Severity: ${severity}`;
+    const durationLabel = document.createElement('span');
+    durationLabel.className = 'report-duration';
+    durationLabel.textContent = `Duration: ${expectedDuration || 'Not specified'}`;
+    meta.append(categoryLabel, severityLabel, durationLabel);
+    reportCard.append(meta);
+
+    return reportCard;
+}
+
+async function loadReports() {
+    try {
+        const response = await fetch('/api/reports');
+        if (!response.ok) throw new Error(`Failed to load reports (${response.status}).`);
+        const { reports } = await response.json();
+        reports
+            .filter((report) => !report.resolved)
+            .reverse()
+            .forEach((report) => {
+                const reportCard = renderReport({
+                    id: report.id,
+                    shape: report.shape,
+                    category: report.category,
+                    description: report.description,
+                    severity: report.severity,
+                    expectedDuration: report.expected_duration,
+                    location: L.latLng(report.lat, report.lng),
+                    radius: report.radius,
+                    start: L.latLng(report.start_lat, report.start_lng),
+                    end: L.latLng(report.end_lat, report.end_lng),
+                    locationLabel: report.location_label
+                });
+                recentReports.prepend(reportCard);
+            });
+    } catch (error) {
+        console.error('Unable to load saved reports:', error);
+    }
+}
+
 routeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -830,7 +979,7 @@ issueType.addEventListener('change', () => {
     issueDescription.required = isOther;
 });
 
-reportForm.addEventListener('submit', (event) => {
+reportForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!issueStartLocation || !issueEndLocation || !selectedLocation || !reportForm.reportValidity()) return;
 
@@ -840,146 +989,80 @@ reportForm.addEventListener('submit', (event) => {
     const description = issueDescription.value.trim();
     const severity = document.querySelector('input[name="severity"]:checked')?.value || 'Not specified';
     const expectedDuration = document.querySelector('input[name="expectedDuration"]:checked')?.value || 'Not specified';
-
-    const popupContent = document.createElement('div');
-    popupContent.style.display="flex";
-    popupContent.style.flexDirection="column";
-    popupContent.style.gap="10px";
-    const popupTitle = document.createElement('strong');
-    popupTitle.textContent = category;
-    popupContent.append(popupTitle);
-
-    const popupSeverity = document.createElement('p');
-    popupSeverity.textContent = `Severity: ${severity}`;
-    popupContent.append(popupSeverity);
-
-    const popupDuration = document.createElement('p');
-    popupDuration.textContent = `Expected duration: ${expectedDuration}`;
-    popupContent.append(popupDuration);
-
-    if (description) {
-        const popupDescription = document.createElement('p');
-        popupDescription.textContent = description;
-        popupContent.append(popupDescription);
-    }
-    const highlightColor = issueColors[category] || issueColors.Other;
-    const severityOpacity = {
-        Minor: 0.15,
-        Moderate: 0.3,
-        Severe: 0.5
-    };
-    const highlightOpacity = severityOpacity[severity] || severityOpacity.Minor;
     const isLineIssue = lineIssueTypes.has(category);
-    const newHighlight = isLineIssue
-        ? L.polyline([issueStartLocation, issueEndLocation], {
-            color: highlightColor,
-            opacity: highlightOpacity + 0.5,
-            weight: 6
-        }).addTo(map)
-        : L.circle(selectedLocation, {
-            radius: issueRadiusMeters,
-            color: highlightColor,
-            fillColor: highlightColor,
-            opacity: highlightOpacity,
-            fillOpacity: highlightOpacity,
-            weight: 2
-        }).addTo(map);
-    const reportedIssue = { 
-        shape: isLineIssue ? 'line': 'circle',
-        location: reportLatLng, 
-        radius: issueRadiusMeters, 
-        start: issueStartLocation,
-        end: issueEndLocation,
-        severity };
-    reportedIssues.push(reportedIssue);
-    [reportStartMarker, reportEndMarker, reportPreviewLayer].forEach((layer) => {
-        if (layer) map.removeLayer(layer);
-    });
-    reportStartMarker = null;
-    reportEndMarker = null;
-    reportPreviewLayer = null;
-    const deleteButton = document.createElement('button');
-    deleteButton.textContent = 'Mark as Resolved';
-    deleteButton.addEventListener('click', () => {
-        const issueIndex = reportedIssues.indexOf(reportedIssue);
-        if (issueIndex !== -1) reportedIssues.splice(issueIndex, 1);
-        map.removeLayer(newHighlight);
-        reportCard.remove();
-    });
-    popupContent.append(deleteButton);
-    newHighlight.bindPopup(popupContent);
+    const locationLabel = selectedLocationLabel || `Issue area (${formatMapLocation(reportLatLng)})`;
 
-    let popupCloseTimeout;
-    const schedulePopupClose = () => {
-        window.clearTimeout(popupCloseTimeout);
-        popupCloseTimeout = window.setTimeout(() => {
-            const popupElement = newHighlight.getPopup().getElement();
-            if (!popupElement?.matches(':hover')) newHighlight.closePopup();
-        }, 200);
-    };
-
-    newHighlight.on('mouseover', () => {
-        window.clearTimeout(popupCloseTimeout);
-        newHighlight.openPopup();
-    });
-    newHighlight.on('mouseout', schedulePopupClose);
-    newHighlight.on('popupopen', (event) => {
-        const popupElement = event.popup.getElement();
-        popupElement.addEventListener('mouseenter', () => window.clearTimeout(popupCloseTimeout));
-        popupElement.addEventListener('mouseleave', schedulePopupClose);
-    });
-
-    const reportCard = document.createElement('article');
-    reportCard.className = 'report-card';
-    reportCard.style.cursor = 'pointer';
-    reportCard.addEventListener('click', () => {
-        map.setView(reportLatLng, 18);
-        newHighlight.openPopup();
-    });
-    const cardTop = document.createElement('div');
-    cardTop.className = 'report-card-top';
-    const locationHeading = document.createElement('h3');
-    locationHeading.textContent = `${selectedLocationLabel || formatMapLocation(selectedLocation)} (${Math.round(issueRadiusMeters * 2)} m ${isLineIssue ? 'long' : 'across'})`;
-    cardTop.append(locationHeading);
-    reportCard.append(cardTop);
-    if (description) {
-        const reportDescription = document.createElement('p');
-        reportDescription.textContent = description;
-        reportCard.append(reportDescription);
-    }
-    const meta = document.createElement('div');
-    meta.className = 'report-meta';
-    const categoryLabel = document.createElement('span');
-    categoryLabel.className = 'report-category';
-    categoryLabel.textContent = category;
-    const severityLabel = document.createElement('span');
-    severityLabel.className = 'report-severity';
-    severityLabel.textContent = `Severity: ${severity}`;
-    const durationLabel = document.createElement('span');
-    durationLabel.className = 'report-duration';
-    durationLabel.textContent = `Duration: ${expectedDuration}`;
-    meta.append(categoryLabel, severityLabel, durationLabel);
-    reportCard.append(meta);
-    recentReports.prepend(reportCard);
-
-    reportForm.reset();
-    descriptionField.hidden = true;
-    issueDescription.required = false;
-    issueStartLocation = null;
-    issueEndLocation = null;
-    selectedLocation = null;
-    selectedLocationLabel = null;
-    selectedIssueLocationLabel = '';
-    locationMessage.textContent = 'No issue area selected. Search for a location or click the map to choose a start point.';
-    reportLocationSearchInput.value = '';
-    reportLocationSearchMessage.textContent = '';
     submitButton.disabled = true;
+    try {
+        const response = await fetch('/api/reports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                shape: isLineIssue ? 'line' : 'circle',
+                lat: reportLatLng.lat,
+                lng: reportLatLng.lng,
+                radius: issueRadiusMeters,
+                startLat: issueStartLocation.lat,
+                startLng: issueStartLocation.lng,
+                endLat: issueEndLocation.lat,
+                endLng: issueEndLocation.lng,
+                category,
+                description,
+                severity,
+                expectedDuration,
+                locationLabel
+            })
+        });
+        if (!response.ok) throw new Error(`Failed to save report (${response.status}).`);
+        const { report } = await response.json();
+
+        const reportCard = renderReport({
+            id: report.id,
+            shape: report.shape,
+            category: report.category,
+            description: report.description,
+            severity: report.severity,
+            expectedDuration: report.expected_duration,
+            location: reportLatLng,
+            radius: issueRadiusMeters,
+            start: issueStartLocation,
+            end: issueEndLocation,
+            locationLabel
+        });
+        recentReports.prepend(reportCard);
+
+        [reportStartMarker, reportEndMarker, reportPreviewLayer].forEach((layer) => {
+            if (layer) map.removeLayer(layer);
+        });
+        reportStartMarker = null;
+        reportEndMarker = null;
+        reportPreviewLayer = null;
+
+        reportForm.reset();
+        descriptionField.hidden = true;
+        issueDescription.required = false;
+        issueStartLocation = null;
+        issueEndLocation = null;
+        selectedLocation = null;
+        selectedLocationLabel = null;
+        selectedIssueLocationLabel = '';
+        locationMessage.textContent = 'No issue area selected. Search for a location or click the map to choose a start point.';
+        reportLocationSearchInput.value = '';
+        reportLocationSearchMessage.textContent = '';
+    } catch (error) {
+        console.error('Unable to save report:', error);
+        locationMessage.textContent = 'Unable to save this report right now. Please try again.';
+    } finally {
+        submitButton.disabled = false;
+    }
 });
 
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
+
+loadReports();
 
 </script>
 </body>
