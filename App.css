@@ -610,17 +610,6 @@ body {
     inset 0 0 0 3px rgba(255, 255, 255, 0.2);
 }
 
-.header::after {
-  content: "✦  ⋆  ♡  ✧";
-  position: absolute;
-  right: 24px;
-  bottom: 14px;
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 24px;
-  letter-spacing: 8px;
-  pointer-events: none;
-}
-
 .eyebrow {
   font-size: 11px;
   font-weight: bold;
@@ -983,6 +972,48 @@ h3 {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.image-gallery {
+  display: flex;       /* Activates flexbox alignment */
+  gap: 10px;           /* Adds space between the images */
+  justify-content: center; /* Centers the row of images (optional) */
+}
+
+.image-gallery img {
+  width: 80px;        /* Sets a fixed size for each image */
+  height: auto;        /* Maintains the original aspect ratio */
+  object-fit: cover;   /* Prevents distortion if you force a fixed height */
+}
+
+.sticker-walkingram1 {
+  display:flex;
+  justify-content:space-evenly;
+  align-items:center;
+  /*gap:10px;*/
+  padding:10px;
+  /*width:80px;
+  height:auto;*/
+}
+.sticker-walkingram1 img {
+  width:10px;
+  height:auto;
+}
+
+.sticker-walkingram2 {
+  position: absolute;
+  top: 10px;
+  left: 100px;
+  width: 80px;
+  z-index: 10;
+}
+
+.sticker-walkingram3 {
+  position: absolute;
+  top: 10px;
+  left: 180px;
+  width: 80px;
+  z-index: 10;
 }
 
 #recent-reports:empty::after {
