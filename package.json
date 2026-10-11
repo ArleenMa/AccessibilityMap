@@ -6,7 +6,9 @@
     "node": ">=20.6.0"
   },
   "scripts": {
-    "start": "node --env-file=.env server.mjs"
+
+"start": "node server.mjs"
+
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
