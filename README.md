@@ -10,7 +10,7 @@ An interactive map of the UNC campus to find locations, report accessibility iss
 - View and mark issue reports as resolved.
 - Find and display a walking route between two Chapel Hill locations, choosing to avoid all reported issues, moderate and severe issues, or severe issues.
 
-Map tiles and location search use OpenStreetMap services. Issue reports are stored in a local SQLite database (`data.db`) via the server, so they persist across restarts and are shared with anyone using the app, and route avoidance uses every unresolved report on file.
+Map tiles and location search use OpenStreetMap services. Issue reports are stored in a local SQLite database (`data.db`) via the server, so they persist across restarts and are shared with anyone using the same app server. Open pages refresh reports every 15 seconds, and route avoidance uses every unresolved report on file.
 
 ## Credits
 

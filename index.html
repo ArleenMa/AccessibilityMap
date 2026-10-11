@@ -171,6 +171,7 @@
                     <div class="section-heading">
                         <h2>Recent Reports</h2>
                     </div>
+                    <p class="map-note">Shared reports refresh automatically while this page is open.</p>
                     <div id="recent-reports"></div>
                 </section>
             </aside>
@@ -344,6 +345,7 @@ let routeLayer = null;
 let routeStartMarker = null;
 let routeEndMarker = null;
 const reportedIssues = [];
+const renderedReports = new Map();
 
 function circleExclusionPolygon(location, radiusMeters = 25) {
   const earthRadiusMeters = 6371008.8;
@@ -557,10 +559,7 @@ function renderReport({ id, shape, category, description, severity, expectedDura
             deleteButton.disabled = false;
             return;
         }
-        const issueIndex = reportedIssues.indexOf(reportedIssue);
-        if (issueIndex !== -1) reportedIssues.splice(issueIndex, 1);
-        map.removeLayer(newHighlight);
-        reportCard.remove();
+        removeRenderedReport(id);
     });
     popupContent.append(deleteButton);
     newHighlight.bindPopup(popupContent);
@@ -617,35 +616,61 @@ function renderReport({ id, shape, category, description, severity, expectedDura
     meta.append(categoryLabel, severityLabel, durationLabel);
     reportCard.append(meta);
 
+    renderedReports.set(id, { reportedIssue, layer: newHighlight, card: reportCard });
     return reportCard;
 }
 
+function removeRenderedReport(id) {
+    const renderedReport = renderedReports.get(id);
+    if (!renderedReport) return;
+
+    const issueIndex = reportedIssues.indexOf(renderedReport.reportedIssue);
+    if (issueIndex !== -1) reportedIssues.splice(issueIndex, 1);
+    map.removeLayer(renderedReport.layer);
+    renderedReport.card.remove();
+    renderedReports.delete(id);
+}
+
+function displayReport(report) {
+    if (renderedReports.has(report.id)) return;
+
+    const reportCard = renderReport({
+        id: report.id,
+        shape: report.shape,
+        category: report.category,
+        description: report.description,
+        severity: report.severity,
+        expectedDuration: report.expected_duration,
+        location: L.latLng(report.lat, report.lng),
+        radius: report.radius,
+        start: L.latLng(report.start_lat, report.start_lng),
+        end: L.latLng(report.end_lat, report.end_lng),
+        locationLabel: report.location_label
+    });
+    recentReports.prepend(reportCard);
+}
+
+let reportsRefreshInProgress = false;
+
 async function loadReports() {
+    if (reportsRefreshInProgress) return;
+    reportsRefreshInProgress = true;
     try {
         const response = await fetch('/api/reports');
         if (!response.ok) throw new Error(`Failed to load reports (${response.status}).`);
         const { reports } = await response.json();
-        reports
-            .filter((report) => !report.resolved)
-            .reverse()
-            .forEach((report) => {
-                const reportCard = renderReport({
-                    id: report.id,
-                    shape: report.shape,
-                    category: report.category,
-                    description: report.description,
-                    severity: report.severity,
-                    expectedDuration: report.expected_duration,
-                    location: L.latLng(report.lat, report.lng),
-                    radius: report.radius,
-                    start: L.latLng(report.start_lat, report.start_lng),
-                    end: L.latLng(report.end_lat, report.end_lng),
-                    locationLabel: report.location_label
-                });
-                recentReports.prepend(reportCard);
-            });
+        const activeReports = reports.filter((report) => !report.resolved);
+        const activeReportIds = new Set(activeReports.map((report) => report.id));
+
+        for (const id of renderedReports.keys()) {
+            if (!activeReportIds.has(id)) removeRenderedReport(id);
+        }
+
+        activeReports.slice().reverse().forEach(displayReport);
     } catch (error) {
         console.error('Unable to load saved reports:', error);
+    } finally {
+        reportsRefreshInProgress = false;
     }
 }
 
@@ -1031,23 +1056,32 @@ reportForm.addEventListener('submit', async (event) => {
                 locationLabel
             })
         });
-        if (!response.ok) throw new Error(`Failed to save report (${response.status}).`);
-        const { report } = await response.json();
+        
+const responseText = await response.text();
 
-        const reportCard = renderReport({
-            id: report.id,
-            shape: report.shape,
-            category: report.category,
-            description: report.description,
-            severity: report.severity,
-            expectedDuration: report.expected_duration,
-            location: reportLatLng,
-            radius: issueRadiusMeters,
-            start: issueStartLocation,
-            end: issueEndLocation,
-            locationLabel
-        });
-        recentReports.prepend(reportCard);
+let data;
+try {
+    data = JSON.parse(responseText);
+} catch {
+    data = { message: responseText };
+}
+
+if (!response.ok) {
+    throw new Error(
+        `HTTP ${response.status}: ${
+            data.error || data.message || 'Unknown server error'
+        }`
+    );
+}
+
+const report = data.report;
+
+if (!report) {
+    throw new Error('The server did not return a saved report.');
+}
+
+        
+        displayReport(report);
 
         [reportStartMarker, reportEndMarker, reportPreviewLayer].forEach((layer) => {
             if (layer) map.removeLayer(layer);
@@ -1068,9 +1102,9 @@ reportForm.addEventListener('submit', async (event) => {
         reportLocationSearchInput.value = '';
         reportLocationSearchMessage.textContent = '';
     } catch (error) {
-        console.error('Unable to save report:', error);
-        locationMessage.textContent = 'Unable to save this report right now. Please try again.';
-    } finally {
+    console.error('Unable to save report:', error);
+    locationMessage.textContent = `Save failed: ${error.message}`;
+    }finally {
         submitButton.disabled = false;
     }
 });
@@ -1081,6 +1115,10 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 loadReports();
+window.setInterval(loadReports, 15000);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadReports();
+});
 
 </script>
 </body>
