@@ -11,7 +11,9 @@ const maxRequestBytes = 4096;
 const allowedFiles = new Map([
     ['/', ['index.html', 'text/html; charset=utf-8']],
     ['/index.html', ['index.html', 'text/html; charset=utf-8']],
-    ['/App.css', ['App.css', 'text/css; charset=utf-8']]
+    ['/App.css', ['App.css', 'text/css; charset=utf-8']],
+    ['/images/walkingram.png', ['images/walkingram.png', 'image/png']],
+    ['/images/standingram.png', ['images/standingram.png', 'image/png']]
 ]);
 
 function sendJson(response, status, body) {
