@@ -1,3 +1,4 @@
+
 {
   "name": "campus-accessibility-map",
   "private": true,
@@ -6,9 +7,7 @@
     "node": ">=20.6.0"
   },
   "scripts": {
-
-"start": "node server.mjs"
-
+    "start": "node --env-file=.env server.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
