@@ -1,64 +1,72 @@
-import Database from 'better-sqlite3';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const directory = dirname(fileURLToPath(import.meta.url));
-const db = new Database(join(directory, 'data.db'));
+import { createClient } from '@supabase/supabase-js';
 
-db.pragma('journal_mode = WAL');
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SECRET_KEY;
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    shape TEXT NOT NULL,
-    location_label TEXT,
-    lat REAL NOT NULL,
-    lng REAL NOT NULL,
-    radius REAL NOT NULL,
-    start_lat REAL NOT NULL,
-    start_lng REAL NOT NULL,
-    end_lat REAL NOT NULL,
-    end_lng REAL NOT NULL,
-    category TEXT NOT NULL,
-    description TEXT,
-    severity TEXT NOT NULL,
-    expected_duration TEXT,
-    resolved INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )
-`);
-
-const insertStatement = db.prepare(`
-  INSERT INTO reports (
-    shape, location_label, lat, lng, radius,
-    start_lat, start_lng, end_lat, end_lng,
-    category, description, severity, expected_duration
-  ) VALUES (
-    @shape, @locationLabel, @lat, @lng, @radius,
-    @startLat, @startLng, @endLat, @endLng,
-    @category, @description, @severity, @expectedDuration
-  )
-`);
-
-const selectAllStatement = db.prepare('SELECT * FROM reports ORDER BY created_at DESC, id DESC');
-const selectByIdStatement = db.prepare('SELECT * FROM reports WHERE id = ?');
-const resolveStatement = db.prepare('UPDATE reports SET resolved = 1 WHERE id = ?');
-
-export function getReports() {
-    return selectAllStatement.all();
+if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+        'Missing SUPABASE_URL or SUPABASE_SECRET_KEY in .env'
+    );
 }
 
-export function insertReport(report) {
-    const result = insertStatement.run({
-        locationLabel: null,
-        description: null,
-        expectedDuration: null,
-        ...report
-    });
-    return selectByIdStatement.get(result.lastInsertRowid);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+    }
+});
+
+export async function getReports() {
+    const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false });
+
+    if (error) throw error;
+
+    return data ?? [];
 }
 
-export function resolveReport(id) {
-    resolveStatement.run(id);
-    return selectByIdStatement.get(id);
+export async function insertReport(report) {
+    const newReport = {
+        shape: report.shape,
+        location_label: report.locationLabel ?? null,
+        lat: report.lat,
+        lng: report.lng,
+        radius: report.radius,
+        start_lat: report.startLat,
+        start_lng: report.startLng,
+        end_lat: report.endLat,
+        end_lng: report.endLng,
+        category: report.category,
+        description: report.description ?? null,
+        severity: report.severity,
+        expected_duration: report.expectedDuration ?? null
+    };
+
+    const { data, error } = await supabase
+        .from('reports')
+        .insert(newReport)
+        .select('*')
+        .single();
+
+    if (error) throw error;
+
+    return data;
+}
+
+export async function resolveReport(id) {
+    const { data, error } = await supabase
+        .from('reports')
+        .update({ resolved: 1 })
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+
+    if (error) throw error;
+
+    return data;
 }

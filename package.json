@@ -9,6 +9,7 @@
     "start": "node --env-file=.env server.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
     "better-sqlite3": "^13.0.3"
   }
 }
