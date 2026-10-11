@@ -974,46 +974,23 @@ h3 {
   margin-top: 12px;
 }
 
-.image-gallery {
-  display: flex;       /* Activates flexbox alignment */
-  gap: 10px;           /* Adds space between the images */
-  justify-content: center; /* Centers the row of images (optional) */
+.header-copy {
+  min-width: 0;
+  flex: 1;
 }
 
-.image-gallery img {
-  width: 80px;        /* Sets a fixed size for each image */
-  height: auto;        /* Maintains the original aspect ratio */
-  object-fit: cover;   /* Prevents distortion if you force a fixed height */
+.header-mascots {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
 }
 
-.sticker-walkingram1 {
-  display:flex;
-  justify-content:space-evenly;
-  align-items:center;
-  /*gap:10px;*/
-  padding:10px;
-  /*width:80px;
-  height:auto;*/
-}
-.sticker-walkingram1 img {
-  width:10px;
-  height:auto;
-}
-
-.sticker-walkingram2 {
-  position: absolute;
-  top: 10px;
-  left: 100px;
-  width: 80px;
-  z-index: 10;
-}
-
-.sticker-walkingram3 {
-  position: absolute;
-  top: 10px;
-  left: 180px;
-  width: 80px;
-  z-index: 10;
+.header-mascots img {
+  display: block;
+  width: clamp(56px, 10vw, 120px);
+  height: auto;
+  object-fit: contain;
 }
 
 #recent-reports:empty::after {
@@ -1066,6 +1043,14 @@ footer {
 
   .header h1 {
     font-size: 28px;
+  }
+
+  .header-mascots {
+    gap: 2px;
+  }
+
+  .header-mascots img {
+    width: clamp(44px, 13vw, 68px);
   }
 
   .map-section,
